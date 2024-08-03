@@ -8,6 +8,9 @@ namespace Waktu
         System.Timers.Timer timer;
         int h, m, s;
 
+        const string Start = "Start";
+        const string Stop = "Stop";
+
         public formTimer()
         {
             InitializeComponent();
@@ -38,29 +41,34 @@ namespace Waktu
                     h += 1;
                 }
 
-                txtTimer.Text = string.Format("{0}:{1}:{2}",
-                    h.ToString().PadLeft(2, '0'),
-                    m.ToString().PadLeft(2, '0'),
-                    s.ToString().PadLeft(2, '0'));
+                txtHour.Text = h.ToString().PadLeft(2, '0');
+                txtMinute.Text = m.ToString().PadLeft(2, '0');
+                txtSecond.Text = s.ToString().PadLeft(2, '0');
+
+                txtScore.Text = $"{Calculation()}";
             }));
         }
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            timer.Start();
-            btnStart.Enabled = false;
-            btnReset.Enabled = false;
+            if (btnStart.Text == Start)
+            {
+                btnStart.Text = Stop;
 
-            txtScore.Text = string.Empty;
-        }
+                timer.Start();
+                btnReset.Enabled = false;
 
-        private void btnStop_Click(object sender, EventArgs e)
-        {
-            timer.Stop();
-            btnStart.Enabled = true;
-            btnReset.Enabled = true;
+                //txtScore.Text = string.Empty;
+            }
+            else
+            {
+                timer.Stop();
 
-            txtScore.Text = $"{Calculation()}";
+                btnStart.Text = Start;
+                btnReset.Enabled = true;
+
+                //txtScore.Text = $"{Calculation()}";
+            }
         }
 
         private void btnReset_Click(object sender, EventArgs e)
@@ -69,18 +77,17 @@ namespace Waktu
             m = 0;
             s = 0;
 
-            txtScore.Text = string.Empty;
+            txtScore.Text = "0";
 
-            txtTimer.Text = string.Format("{0}:{1}:{2}",
-                h.ToString().PadLeft(2, '0'),
-                m.ToString().PadLeft(2, '0'),
-                s.ToString().PadLeft(2, '0'));
+            txtHour.Text = h.ToString().PadLeft(2, '0');
+            txtMinute.Text = m.ToString().PadLeft(2, '0');
+            txtSecond.Text = s.ToString().PadLeft(2, '0');
         }
 
         private decimal Calculation()
         {
             var totalSeconds = (h * 3600) + (m * 60) + s;
-            
+
             return Math.Round((decimal)totalSeconds / 3600, 2);
         }
     }
