@@ -73,7 +73,7 @@
             // label2
             // 
             label2.AutoSize = true;
-            label2.Location = new Point(176, 152);
+            label2.Location = new Point(96, 152);
             label2.Name = "label2";
             label2.Size = new Size(67, 25);
             label2.TabIndex = 6;
@@ -82,7 +82,7 @@
             // label3
             // 
             label3.AutoSize = true;
-            label3.Location = new Point(95, 152);
+            label3.Location = new Point(174, 152);
             label3.Name = "label3";
             label3.Size = new Size(71, 25);
             label3.TabIndex = 7;
@@ -141,7 +141,7 @@
             // 
             label4.AutoSize = true;
             label4.Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label4.Location = new Point(13, 11);
+            label4.Location = new Point(5, 9);
             label4.Name = "label4";
             label4.Size = new Size(217, 38);
             label4.TabIndex = 12;
@@ -162,7 +162,7 @@
             Controls.Add(label1);
             Controls.Add(btnReset);
             Controls.Add(btnStart);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
             Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "formTimer";
             StartPosition = FormStartPosition.CenterScreen;
