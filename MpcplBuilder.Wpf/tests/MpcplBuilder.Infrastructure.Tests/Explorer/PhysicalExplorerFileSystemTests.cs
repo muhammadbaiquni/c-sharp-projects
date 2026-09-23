@@ -1,3 +1,4 @@
+using MpcplBuilder.Application.Explorer;
 using MpcplBuilder.Infrastructure.Explorer;
 
 namespace MpcplBuilder.Infrastructure.Tests.Explorer;
@@ -106,7 +107,35 @@ public sealed class PhysicalExplorerFileSystemTests
     }
 
     [Fact]
-    public async Task GetChildFoldersAsync_PreservesAccessibleSiblingWhenLaterChildIsInaccessible()
+    public async Task LoadChildren_ExpandingInaccessibleChildDoesNotDiscardItsSiblings()
+    {
+        const string parent = @"C:\Media";
+        const string accessible = @"C:\Media\Accessible";
+        const string inaccessible = @"C:\Media\Inaccessible";
+
+        IEnumerable<string> Enumerate(string path) => path switch
+        {
+            parent => [accessible, inaccessible],
+            inaccessible => throw new UnauthorizedAccessException("Child access denied"),
+            _ => []
+        };
+
+        var fileSystem = new PhysicalExplorerFileSystem(() => [], Enumerate);
+        var loadChildren = new LoadExplorerChildren(fileSystem);
+
+        var parentResult = await loadChildren.ExecuteAsync(parent, CancellationToken.None);
+        parentResult.Status.Should().Be(ExplorerLoadStatus.Success);
+        parentResult.Folders.Select(folder => folder.Path).Should().Equal(accessible, inaccessible);
+
+        var inaccessibleResult = await loadChildren.ExecuteAsync(inaccessible, CancellationToken.None);
+        inaccessibleResult.Status.Should().Be(ExplorerLoadStatus.AccessFailure);
+        inaccessibleResult.Folders.Should().BeEmpty();
+        inaccessibleResult.ErrorMessage.Should().Contain("Child access denied");
+        parentResult.Folders.Select(folder => folder.Path).Should().Equal(accessible, inaccessible);
+    }
+
+    [Fact]
+    public async Task GetChildFoldersAsync_ReturnsPartialResultWhenParentEnumerationStopsMidStream()
     {
         IEnumerable<string> Enumerate(string _)
         {

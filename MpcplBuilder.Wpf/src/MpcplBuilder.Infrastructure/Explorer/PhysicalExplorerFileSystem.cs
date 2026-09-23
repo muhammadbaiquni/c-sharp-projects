@@ -32,6 +32,7 @@ public sealed class PhysicalExplorerFileSystem : IExplorerFileSystem
             var folders = new List<string>();
             try
             {
+                // Listing a parent yields child paths; expanding a child calls this method again.
                 foreach (var folder in _enumerateDirectories(path))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -43,6 +44,7 @@ public sealed class PhysicalExplorerFileSystem : IExplorerFileSystem
                 exception is UnauthorizedAccessException or IOException &&
                 exception is not (DirectoryNotFoundException or DriveNotFoundException))
             {
+                // A failed iterator cannot reveal children it has not yielded.
                 cancellationToken.ThrowIfCancellationRequested();
                 return new ExplorerChildFoldersResult(
                     Array.AsReadOnly(folders.ToArray()),
