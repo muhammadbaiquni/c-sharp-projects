@@ -1,126 +1,139 @@
 # MPC Playlist Builder
 
-WPF application to create MPC-HC playlists (.mpcpl) from a video folder recursively, with automatic subtitle matching support.
+A WPF application that recursively scans a video folder and creates an MPC-HC/MPC-BE playlist (`.mpcpl`) with automatic subtitle matching.
 
-## Fitur
+## Features
 
-### 1. Relative Path (Default - Portable)
-- The playlist uses paths relative to the selected root folder.
-- Advantage: The playlist remains functional when the folder is moved to another location or drive.
+### 1. Relative Paths (Default, Portable)
+
+- Stores paths relative to the selected root folder.
+- Keeps the playlist working when the entire folder is moved to another location or drive.
 - Example: `Subfolder\Movie.mkv` instead of `D:\Videos\Subfolder\Movie.mkv`.
-- Recommendation: Use this mode for maximum portability.
+- Recommended for maximum portability.
 
-### 2. Full Path (Absolute)
-- The playlist uses full absolute paths.
-- Advantage: Paths remain valid even if the .mpcpl file is moved.
-- Disadvantage: Not portable — paths will break if the video folder is moved.
+### 2. Full Paths (Absolute)
+
+- Stores full absolute paths.
+- Keeps media paths valid when only the `.mpcpl` file is moved.
+- The playlist will stop working if the video folder itself is moved.
 - Example: `D:\Videos\Subfolder\Movie.mkv`.
 
-### 3. **Long Path (\\?\)**
-- Playlist menggunakan format Windows Long Path dengan prefix `\\?\`
-- **Keuntungan**: Mendukung path yang sangat panjang (>260 karakter)
-- **Contoh**: `\\?\D:\Videos\Very\Long\Path\Subfolder\Movie.mkv`
-- **Catatan**: Hanya untuk Windows
+### 3. Long Paths (`\\?\`)
 
-### 4. Detect Existing Playlist
-- Automatically detects if a `Playlist.mpcpl` file already exists in the folder.
-- Displays information: creation/last-write date and file size.
-- Asks for confirmation before overwriting an existing playlist to avoid accidental duplicates.
+- Stores paths using the Windows long-path prefix (`\\?\`).
+- Supports paths longer than 260 characters.
+- Example: `\\?\D:\Videos\Very\Long\Path\Subfolder\Movie.mkv`.
+- Available on Windows only.
 
-## Format Video yang Didukung
+### 4. Existing Playlist Detection
+
+- Automatically detects an existing `Playlist.mpcpl` file in the selected folder.
+- Displays its last-write date and file size.
+- Requests confirmation before overwriting it.
+
+### 5. Automatic Subtitle Matching
+
+Subtitles are matched automatically when their filenames correspond to the video filename:
+
+- `Movie.mkv` → `Movie.srt`
+- `Movie.mkv` → `Movie.en.srt`
+- `Movie.mkv` → `Movie.id.ass`
+
+## Supported Video Formats
+
 `.mp4`, `.mkv`, `.avi`, `.mov`, `.wmv`, `.m4v`, `.webm`, `.mpg`, `.mpeg`, `.ts`, `.m2ts`, `.flv`
 
-## Format Subtitle yang Didukung
+## Supported Subtitle Formats
+
 `.srt`, `.ass`, `.ssa`, `.vtt`, `.sub`, `.idx`, `.txt`
 
-## How to use
+## Usage
 
-1. Select the root folder: Click the "Browse..." button and pick the folder that contains your videos.
-   - If a playlist already exists in the selected folder, a warning with file info will be shown.
-2. Choose Path Type:
-   - Relative Path (default): Portable, recommended if you plan to move the folder.
-   - Full Path: Use absolute paths if you will not move the folder.
-   - Long Path: Use when some files have very long paths.
-3. Generate: Click the "Generate" button to build the playlist.
-   - If a playlist already exists, a confirmation dialog appears.
-   - Choose "Yes" to overwrite, or "No" to cancel.
-4. Clear: Click the "Clear" button to clear the preview (this does not delete the playlist file).
-5. Output: The `Playlist.mpcpl` file will be created in the selected root folder.
+1. Click **Browse...** and select the root folder that contains your videos.
+   - The application scans the folder recursively.
+   - If a playlist already exists, the application displays its file information and asks whether overwriting should be enabled.
+2. Select a path type:
+   - **Relative Path** (default): portable and recommended when the folder may be moved.
+   - **Full Path**: uses absolute paths when the video folder will remain in place.
+   - **Long Path**: supports files with paths longer than 260 characters.
+3. Click **Generate** to create the playlist.
+   - If a playlist already exists, a confirmation dialog appears before it is overwritten.
+   - Select **Yes** to overwrite it or **No** to cancel.
+4. Click **Clear** to clear the preview. This does not delete the generated playlist.
+5. The application saves `Playlist.mpcpl` in the selected root folder.
 
-## Tombol & Fungsi
+## Buttons
 
-| Tombol | Fungsi |
-|--------|--------|
-| **Browse...** | Select the root folder to scan for videos. Detects existing playlist files. |
-| **Generate** | Create the .mpcpl playlist and show a preview (asks for overwrite confirmation if needed). |
-| **Clear** | Clear the preview without deleting any playlist files. |
+| Button | Function |
+| --- | --- |
+| **Browse...** | Selects the root folder, scans for supported videos, and detects an existing playlist. |
+| **Generate** | Creates the `.mpcpl` playlist and displays a preview. |
+| **Clear** | Clears the preview without deleting the playlist file. |
+| **Cancel** | Cancels the active scan or playlist generation operation. |
 
-## Indikator Status
+## Status Indicators
 
-### Output Info
-- `(will be saved as "Playlist.mpcpl" in: ...)` - New folder, no playlist exists yet
-- `⚠️ Playlist already exists! (created: ..., size: ...)` - Warning: playlist already exists
-- `✅ Playlist created successfully! (...)` - Success: playlist created/updated
+### Output Information
+
+- `(will be saved as "Playlist.mpcpl" in: ...)` — no playlist currently exists in the selected folder.
+- `⚠️ Playlist already exists! (created: ..., size: ...)` — an existing playlist was detected.
+- `✅ Playlist created successfully! (...)` — the playlist was created or updated successfully.
 
 ### Status Bar
-- `Ready` - Ready to use
-- `Scanning...` - Scanning the folder
-- `Done` - Operation completed
-- `Preview cleared` - The preview has been cleared
-- `Warning: Existing playlist detected` - An existing playlist was detected
-- `Cancelled` - User cancelled the overwrite
 
-## Matching Subtitle
-
-Subtitles are automatically matched when the subtitle filename corresponds to the video:
-- `Movie.mkv` -> `Movie.srt`
-- `Movie.mkv` -> `Movie.en.srt`
-- `Movie.mkv` -> `Movie.id.ass`
+- `Ready` — the application is ready.
+- `Scanning...` — the folder is being scanned.
+- `Done` — playlist generation completed.
+- `Preview cleared` — the preview was cleared.
+- `Warning: Existing playlist detected` — an existing playlist was found.
+- `Cancelled` — the operation was cancelled.
 
 ## Technical Details
 
 ### Path Mode Comparison
 
-| Mode | Portabilitas | Path Length | Contoh |
-|------|--------------|-------------|--------|
-| **Relative** | ? Tinggi | Normal | `Videos\Movie.mkv` |
-| **Full Path** | ? Rendah | Normal | `D:\Media\Videos\Movie.mkv` |
-| **Long Path** | ? Rendah | >260 chars | `\\?\D:\Very\Long\...\Movie.mkv` |
+| Mode | Portability | Path Length | Example |
+| --- | --- | --- | --- |
+| **Relative** | High | Normal | `Videos\Movie.mkv` |
+| **Full Path** | Low | Normal | `D:\Media\Videos\Movie.mkv` |
+| **Long Path** | Low | More than 260 characters | `\\?\D:\Very\Long\...\Movie.mkv` |
 
-### Path Conversion Logic
+### Path Conversion Examples
 
-```csharp
-// Relative Path
-Root: C:\Videos
-File: C:\Videos\Movies\Action\Movie.mkv
-Output: Movies\Action\Movie.mkv  ? Portable!
+```text
+# Relative path
+Root:   C:\Videos
+File:   C:\Videos\Movies\Action\Movie.mkv
+Output: Movies\Action\Movie.mkv
 
-// Full Path
-Output: C:\Videos\Movies\Action\Movie.mkv  ? Not portable
+# Full path
+Output: C:\Videos\Movies\Action\Movie.mkv
 
-// Long Path
-Output: \\?\C:\Videos\Movies\Action\Movie.mkv  ? Supports >260 chars
+# Long path
+Output: \\?\C:\Videos\Movies\Action\Movie.mkv
 ```
 
 ### Playlist Overwrite Protection
 
-```
-1. User clicks Browse ? Check if Playlist.mpcpl exists
-   ?
-2. If exists ? Show warning with file info (date + size)
-   ?
-3. User clicks Generate ? Show confirmation dialog
-   ?
-4. User selects Yes ? Overwrite file
-   User selects No ? Cancel operation
+```text
+1. Select a folder.
+   ↓
+2. Check whether Playlist.mpcpl exists.
+   ↓
+3. If it exists, display its file information and request overwrite confirmation.
+   ↓
+4. Generate the playlist when overwrite is allowed; otherwise, cancel the operation.
 ```
 
 ## Requirements
-- Windows (net8.0-windows)
-- .NET 8.0 Runtime
-- MPC-HC or MPC-BE to play the playlist
 
-## Build
-```bash
-dotnet build
-dotnet run
+- Windows
+- .NET 8 Desktop Runtime
+- MPC-HC or MPC-BE for playlist playback
+
+## Build and Run
+
+```powershell
+dotnet build MpcplBuilder.Wpf.sln
+dotnet run --project MpcplBuilder.Wpf.csproj
+```
