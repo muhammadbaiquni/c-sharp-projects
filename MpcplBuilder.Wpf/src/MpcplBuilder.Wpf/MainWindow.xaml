@@ -6,9 +6,7 @@
         WindowStartupLocation="CenterScreen" Icon="pack://application:,,,/MpcplBuilder.Wpf;component/ic_playlist_add_128_28561.png">
     <TabControl x:Name="ShellTabs" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
         <TabItem Header="Explorer">
-            <Grid DataContext="{Binding Explorer}">
-                <TextBlock Text="Explorer" Margin="16" />
-            </Grid>
+            <views:ExplorerView DataContext="{Binding Explorer}" />
         </TabItem>
         <TabItem Header="Default">
             <views:DefaultView DataContext="{Binding Default}" />
