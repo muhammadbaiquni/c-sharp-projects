@@ -19,7 +19,4 @@
   <ItemGroup>
     <Resource Include="ic_playlist_add_128_28561.png" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="MpcplBuilder.Wpf.Tests\**\*.cs" />
-  </ItemGroup>
 </Project>
