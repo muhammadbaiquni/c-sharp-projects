@@ -8,28 +8,36 @@ internal sealed class FakeExplorerFileSystem : IExplorerFileSystem
     public Dictionary<string, IReadOnlyList<string>> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> PlaylistFolders { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Exception? ExceptionToThrow { get; set; }
+    public bool IgnoreCancellation { get; set; }
+    public Action? OnGetDrives { get; set; }
+    public Action? OnGetChildFolders { get; set; }
+    public Action? OnHasPlaylist { get; set; }
 
     public Task<IReadOnlyList<string>> GetDrivesAsync(CancellationToken cancellationToken)
     {
         Check(cancellationToken);
+        OnGetDrives?.Invoke();
         return Task.FromResult(Drives);
     }
 
     public Task<IReadOnlyList<string>> GetChildFoldersAsync(string path, CancellationToken cancellationToken)
     {
         Check(cancellationToken);
+        OnGetChildFolders?.Invoke();
         return Task.FromResult(Children.GetValueOrDefault(path) ?? []);
     }
 
     public Task<bool> HasPlaylistAsync(string path, CancellationToken cancellationToken)
     {
         Check(cancellationToken);
+        OnHasPlaylist?.Invoke();
         return Task.FromResult(PlaylistFolders.Contains(path));
     }
 
     private void Check(CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        if (!IgnoreCancellation)
+            cancellationToken.ThrowIfCancellationRequested();
         if (ExceptionToThrow is not null)
             throw ExceptionToThrow;
     }

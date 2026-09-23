@@ -142,4 +142,142 @@ public sealed class ExplorerUseCaseTests
             .ExecuteAsync(@"D:\Media", cancellation.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public async Task LoadRoots_PreCancelledToken_PropagatesWhenPortIgnoresCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var fileSystem = new FakeExplorerFileSystem { IgnoreCancellation = true };
+
+        var act = () => new LoadExplorerRoots(fileSystem).ExecuteAsync(cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task LoadChildren_PreCancelledToken_PropagatesWhenPortIgnoresCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var fileSystem = new FakeExplorerFileSystem { IgnoreCancellation = true };
+
+        var act = () => new LoadExplorerChildren(fileSystem)
+            .ExecuteAsync(@"D:\Media", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task InspectPlaylistPresence_PreCancelledToken_PropagatesWhenPortIgnoresCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var fileSystem = new FakeExplorerFileSystem { IgnoreCancellation = true };
+
+        var act = () => new InspectPlaylistPresence(fileSystem)
+            .ExecuteAsync(@"D:\Media", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task LoadRoots_CancelledDuringDriveLoad_PropagatesWithNoDrives()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            IgnoreCancellation = true,
+            OnGetDrives = cancellation.Cancel
+        };
+
+        var act = () => new LoadExplorerRoots(fileSystem).ExecuteAsync(cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task LoadChildren_CancelledDuringChildLoad_PropagatesWithNoChildren()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            IgnoreCancellation = true,
+            OnGetChildFolders = cancellation.Cancel
+        };
+
+        var act = () => new LoadExplorerChildren(fileSystem)
+            .ExecuteAsync(@"D:\Media", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task LoadRoots_CancelledDuringPlaylistInspection_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            Drives = [@"D:\"],
+            IgnoreCancellation = true,
+            OnHasPlaylist = cancellation.Cancel
+        };
+
+        var act = () => new LoadExplorerRoots(fileSystem).ExecuteAsync(cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task LoadChildren_CancelledDuringPlaylistInspection_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            Children = { [@"D:\Media"] = [@"D:\Media\A"] },
+            IgnoreCancellation = true,
+            OnHasPlaylist = cancellation.Cancel
+        };
+
+        var act = () => new LoadExplorerChildren(fileSystem)
+            .ExecuteAsync(@"D:\Media", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task InspectPlaylistPresence_CancelledDuringPortCall_Propagates()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            IgnoreCancellation = true,
+            OnHasPlaylist = cancellation.Cancel
+        };
+
+        var act = () => new InspectPlaylistPresence(fileSystem)
+            .ExecuteAsync(@"D:\Media", cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Load_ResultFoldersCannotBeMutated(bool loadRoots)
+    {
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            Drives = [@"D:\"],
+            Children = { [@"D:\Media"] = [@"D:\Media\A"] }
+        };
+        var result = loadRoots
+            ? await new LoadExplorerRoots(fileSystem).ExecuteAsync(CancellationToken.None)
+            : await new LoadExplorerChildren(fileSystem).ExecuteAsync(@"D:\Media", CancellationToken.None);
+
+        var act = () => ((IList<ExplorerFolder>)result.Folders)[0] =
+            new ExplorerFolder(@"Z:\Other", "Other", false, true);
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

@@ -6,23 +6,27 @@ public sealed class LoadExplorerChildren(IExplorerFileSystem fileSystem) : ILoad
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var paths = await fileSystem.GetChildFoldersAsync(path, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             var folders = new List<ExplorerFolder>(paths.Count);
             foreach (var childPath in paths)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                var hasPlaylist = await fileSystem.HasPlaylistAsync(childPath, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 folders.Add(new ExplorerFolder(
                     childPath,
                     Path.GetFileName(Path.TrimEndingDirectorySeparator(childPath)),
-                    await fileSystem.HasPlaylistAsync(childPath, cancellationToken),
+                    hasPlaylist,
                     true));
             }
 
             return new(
                 ExplorerLoadStatus.Success,
-                folders.OrderBy(folder => folder.DisplayName, StringComparer.OrdinalIgnoreCase)
+                Array.AsReadOnly(folders.OrderBy(folder => folder.DisplayName, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
+                    .ToArray()),
                 null);
         }
         catch (Exception exception) when (exception is DirectoryNotFoundException or DriveNotFoundException)
