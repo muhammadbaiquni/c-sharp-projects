@@ -4,7 +4,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MpcplBuilder.Application.Folders;
 using MpcplBuilder.Application.Playlists;
-using MpcplBuilder.Domain.Playlists;
 using MpcplBuilder.Wpf.Services;
 
 namespace MpcplBuilder.Wpf;
@@ -142,7 +141,7 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             var result = await _generatePlaylist.ExecuteAsync(
-                new GeneratePlaylistRequest(RootPath, SelectedPathMode()), token);
+                SelectedRequest(), token);
             if (result.Status != PlaylistGenerationStatus.Success)
             {
                 Status = "Error";
@@ -177,5 +176,7 @@ public partial class MainWindowViewModel : ObservableObject
         IsBusy = false;
     }
     private bool CanCancel() => IsBusy;
-    private PathMode SelectedPathMode() => IsLongPath ? PathMode.Long : IsFullPath ? PathMode.Full : PathMode.Relative;
+    private GeneratePlaylistRequest SelectedRequest() => IsLongPath
+        ? GeneratePlaylistRequest.Long(RootPath)
+        : IsFullPath ? GeneratePlaylistRequest.Full(RootPath) : GeneratePlaylistRequest.Relative(RootPath);
 }

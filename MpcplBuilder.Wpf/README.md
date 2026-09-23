@@ -90,6 +90,27 @@ Subtitles are matched automatically when their filenames correspond to the video
 
 ## Technical Details
 
+### Solution Structure
+
+The solution follows Clean Architecture so business rules can be tested independently of WPF and the physical filesystem:
+
+```text
+src/
+├── MpcplBuilder.Domain/          Playlist models and deterministic media/path policies
+├── MpcplBuilder.Application/     Folder inspection and playlist generation use cases
+├── MpcplBuilder.Infrastructure/  Filesystem traversal and MPCPL output adapters
+└── MpcplBuilder.Wpf/             WPF composition, ViewModel, dialogs, and views
+tests/
+├── MpcplBuilder.Domain.Tests/
+├── MpcplBuilder.Application.Tests/
+├── MpcplBuilder.Infrastructure.Tests/
+└── MpcplBuilder.Wpf.Tests/
+```
+
+The Domain project has no project dependencies. Application depends only on Domain. Infrastructure implements Application ports and uses Domain policies. WPF composes the application and infrastructure at startup.
+
+The test suite follows a test-first workflow and covers media policies, path formatting, application use cases, real filesystem integration, MPCPL byte compatibility, ViewModel command state, cancellation, stale operation protection, and WPF bindings.
+
 ### Path Mode Comparison
 
 | Mode | Portability | Path Length | Example |
@@ -134,6 +155,8 @@ Output: \\?\C:\Videos\Movies\Action\Movie.mkv
 ## Build and Run
 
 ```powershell
-dotnet build MpcplBuilder.Wpf.sln
-dotnet run --project MpcplBuilder.Wpf.csproj
+dotnet restore MpcplBuilder.Wpf.sln
+dotnet build MpcplBuilder.Wpf.sln --no-restore
+dotnet test MpcplBuilder.Wpf.sln --no-build
+dotnet run --project src/MpcplBuilder.Wpf/MpcplBuilder.Wpf.csproj
 ```

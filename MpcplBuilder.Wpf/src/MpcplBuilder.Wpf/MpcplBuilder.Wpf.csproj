@@ -26,6 +26,5 @@
   <ItemGroup>
     <ProjectReference Include="..\MpcplBuilder.Application\MpcplBuilder.Application.csproj" />
     <ProjectReference Include="..\MpcplBuilder.Infrastructure\MpcplBuilder.Infrastructure.csproj" />
-    <ProjectReference Include="..\MpcplBuilder.Domain\MpcplBuilder.Domain.csproj" />
   </ItemGroup>
 </Project>
