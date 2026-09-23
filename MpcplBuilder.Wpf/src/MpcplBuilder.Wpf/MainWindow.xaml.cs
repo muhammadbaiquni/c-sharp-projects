@@ -7,10 +7,7 @@ namespace MpcplBuilder.Wpf
         public MainWindow()
         {
             InitializeComponent();
-            // Use a dedicated ViewModel for MVVM
-            DataContext = new MainWindowViewModel();
         }
 
-        // Handlers moved to MainWindowViewModel for MVVM
     }
 }
