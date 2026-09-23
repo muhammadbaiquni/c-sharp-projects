@@ -4,10 +4,11 @@ using MpcplBuilder.Application.Folders;
 using MpcplBuilder.Application.Playlists;
 using MpcplBuilder.Domain.Playlists;
 using MpcplBuilder.Wpf.Tests.Fakes;
+using MpcplBuilder.Wpf.ViewModels;
 
 namespace MpcplBuilder.Wpf.Tests;
 
-public sealed class MainWindowViewModelTests
+public sealed class DefaultViewModelTests
 {
     [Fact]
     public void Initially_GenerateIsDisabled()
@@ -195,7 +196,7 @@ public sealed class MainWindowViewModelTests
     private static Task<FolderInspectionResult> Ready(string path) => Task.FromResult(
         new FolderInspectionResult(path, FolderInspectionStatus.Ready, true, null, null));
 
-    private static MainWindowViewModel CreateViewModel(
+    private static DefaultViewModel CreateViewModel(
         FakeInspectFolder? inspect = null,
         FakeGeneratePlaylist? generate = null,
         FakeFolderPicker? picker = null,
