@@ -59,7 +59,7 @@ public sealed class MainWindowBindingTests
                 var defaultViewModel = new DefaultViewModel(
                     new FakeInspectFolder(), new FakeGeneratePlaylist(),
                     new FakeFolderPicker(), new FakeUserDialogService());
-                var explorerViewModel = new ExplorerViewModel(new FakeLoadExplorerRoots(), new FakeLoadExplorerChildren(), new FakeInspectPlaylistPresence(), new FakeGeneratePlaylist());
+                var explorerViewModel = new ExplorerViewModel(new FakeLoadExplorerRoots(), new FakeLoadExplorerChildren(), new FakeInspectPlaylistPresence(), new FakeGeneratePlaylist(), new FakeUserDialogService());
                 var shell = new MainWindowViewModel(defaultViewModel, explorerViewModel);
                 var window = new MainWindow { DataContext = shell };
                 window.Show();

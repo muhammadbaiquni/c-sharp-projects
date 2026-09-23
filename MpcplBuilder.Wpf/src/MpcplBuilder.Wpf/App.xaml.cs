@@ -17,17 +17,19 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         var mediaFiles = new PhysicalMediaFileRepository();
         var output = new MpcplPlaylistOutput();
+        var dialogs = new WpfUserDialogService();
         var defaultViewModel = new DefaultViewModel(
             new InspectFolder(mediaFiles, output),
             new GeneratePlaylist(mediaFiles, output),
             new WindowsFolderPicker(),
-            new WpfUserDialogService());
+            dialogs);
         var explorerFileSystem = new PhysicalExplorerFileSystem();
         var explorerViewModel = new ExplorerViewModel(
             new LoadExplorerRoots(explorerFileSystem),
             new LoadExplorerChildren(explorerFileSystem),
             new InspectPlaylistPresence(explorerFileSystem),
-            new GeneratePlaylist(mediaFiles, output));
+            new GeneratePlaylist(mediaFiles, output),
+            dialogs);
         var viewModel = new MainWindowViewModel(defaultViewModel, explorerViewModel);
         MainWindow = new MainWindow { DataContext = viewModel };
         MainWindow.Show();

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using MpcplBuilder.Application.Explorer;
+using MpcplBuilder.Application.Playlists;
 using MpcplBuilder.Domain.Playlists;
 using MpcplBuilder.Wpf.Tests.Fakes;
 using MpcplBuilder.Wpf.ViewModels;
@@ -165,7 +166,226 @@ public sealed class ExplorerViewModelTests
         vm.IsBusy.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Generate_WhenSuccessful_RefreshesOriginalNodeWithoutReplacingSelectionOrExpansion()
+    {
+        var inspections = 0;
+        var presence = new FakeInspectPlaylistPresence
+        {
+            Handler = (_, _) => Task.FromResult(++inspections == 2)
+        };
+        var vm = Create(presence: presence);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        await node.ExpandAsync();
+        vm.SelectedFolder = node;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        inspections.Should().Be(2);
+        vm.SelectedFolder.Should().BeSameAs(node);
+        node.IsExpanded.Should().BeTrue();
+        node.HasPlaylist.Should().BeTrue();
+        vm.Status.Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task Generate_WhenPlaylistAppearsAfterSelection_DecliningOverwriteSkipsGeneration()
+    {
+        var generator = new FakeGeneratePlaylist();
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = false };
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => Task.FromResult(true) };
+        var vm = Create(generate: generator, presence: presence, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        vm.SelectedFolder = node;
+        node.HasPlaylist.Should().BeFalse();
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.ConfirmOverwriteCalls.Should().Be(1);
+        generator.Calls.Should().Be(0);
+        node.HasPlaylist.Should().BeFalse();
+        vm.Status.Should().Be("Cancelled");
+    }
+
+    [Fact]
+    public async Task Generate_WhenPlaylistAppearsAfterPresenceCheck_ConfirmsBeforeRetry()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return requests.Count == 1
+                ? new PlaylistGenerationResult(PlaylistGenerationStatus.OverwriteRequired, null, [], null)
+                : new PlaylistGenerationResult(PlaylistGenerationStatus.Success, @"D:\Playlist.mpcpl", [], null);
+        });
+        var inspections = 0;
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => Task.FromResult(++inspections == 2) };
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = true };
+        var vm = new ExplorerViewModel(Roots(), new FakeLoadExplorerChildren(), presence, generator, dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        vm.SelectedFolder = node;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        requests.Select(r => r.OverwriteExisting).Should().Equal(false, true);
+        dialogs.ConfirmOverwriteCalls.Should().Be(1);
+        node.HasPlaylist.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Generate_WhenCancelledDuringOverwritePrompt_DoesNotStartGeneration()
+    {
+        var generator = new FakeGeneratePlaylist();
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = true };
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => Task.FromResult(true) };
+        var vm = Create(generate: generator, presence: presence, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        dialogs.OnConfirmOverwrite = () => vm.CancelCommand.Execute(null);
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        generator.Calls.Should().Be(0);
+        vm.Status.Should().Be("Cancelled");
+        vm.SelectedFolder.HasPlaylist.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(PathMode.Full)]
+    [InlineData(PathMode.Long)]
+    public async Task Generate_UsesActivePathMode(PathMode pathMode)
+    {
+        var generator = new FakeGeneratePlaylist();
+        var vm = Create(generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.IsRelativePath = false;
+        vm.IsFullPath = pathMode == PathMode.Full;
+        vm.IsLongPath = pathMode == PathMode.Long;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        generator.LastRequest!.PathMode.Should().Be(pathMode);
+        generator.LastRequest.RootPath.Should().Be(@"D:\");
+    }
+
+    [Fact]
+    public async Task Generate_SelectedNestedFolderDelegatesItsPathToRecursiveGenerator()
+    {
+        var generator = new FakeGeneratePlaylist();
+        var children = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(
+            Success(new ExplorerFolder(@"D:\Series", "Series", false, true))) };
+        var vm = Create(children: children, generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var drive = vm.Roots.Single().Children.Single();
+        await drive.ExpandAsync();
+        vm.SelectedFolder = drive.Children.Single();
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        generator.Calls.Should().Be(1);
+        generator.LastRequest!.RootPath.Should().Be(@"D:\Series");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Generate_WhenDirectPlaylistExists_RequiresConsentAndUsesOverwriteFlag(bool initiallyGreen)
+    {
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(
+            Success(new ExplorerFolder(@"D:\", "Drive", initiallyGreen, true))) };
+        var generator = new FakeGeneratePlaylist();
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = true };
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => Task.FromResult(true) };
+        var vm = Create(roots: roots, generate: generator, presence: presence, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        vm.SelectedFolder = node;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.ConfirmOverwriteCalls.Should().Be(1);
+        generator.LastRequest!.OverwriteExisting.Should().BeTrue();
+        node.HasPlaylist.Should().BeTrue();
+        vm.SelectedFolder.Should().BeSameAs(node);
+    }
+
+    [Fact]
+    public async Task Generate_WhenOutputFails_LeavesSelectedNodeYellow()
+    {
+        var generator = new FakeGeneratePlaylist { Response = Task.FromResult(
+            new PlaylistGenerationResult(PlaylistGenerationStatus.OutputFailure, null, [], "disk error")) };
+        var inspections = 0;
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) =>
+        {
+            inspections++;
+            return Task.FromResult(false);
+        } };
+        var vm = Create(generate: generator, presence: presence);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        vm.SelectedFolder = node;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        inspections.Should().Be(1);
+        node.HasPlaylist.Should().BeFalse();
+        vm.Status.Should().Be("disk error");
+    }
+
+    [Fact]
+    public async Task Generate_WhenCancelledBeforeCompletion_IgnoresLateSuccess()
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var vm = Create(generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var node = vm.Roots.Single().Children.Single();
+        vm.SelectedFolder = node;
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        vm.CancelCommand.Execute(null);
+        pending.SetResult(new PlaylistGenerationResult(PlaylistGenerationStatus.Success, @"D:\Playlist.mpcpl", [], null));
+        await generation;
+
+        generator.LastToken.IsCancellationRequested.Should().BeTrue();
+        node.HasPlaylist.Should().BeFalse();
+        vm.Status.Should().Be("Cancelled");
+        vm.IsBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generate_WhenSelectionChangesDuringGeneration_DoesNotUpdateOldNode()
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\", "D", false, true), new ExplorerFolder(@"E:\", "E", false, true))) };
+        var vm = Create(roots: roots, generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var first = vm.Roots.Single().Children.First();
+        var second = vm.Roots.Single().Children.Last();
+        vm.SelectedFolder = first;
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        vm.SelectedFolder = second;
+        pending.SetResult(new PlaylistGenerationResult(PlaylistGenerationStatus.Success, @"D:\Playlist.mpcpl", [], null));
+        await generation;
+
+        first.HasPlaylist.Should().BeFalse();
+        vm.SelectedFolder.Should().BeSameAs(second);
+        vm.IsBusy.Should().BeFalse();
+    }
+
     private static FakeLoadExplorerRoots Roots() => new() { Handler = _ => Task.FromResult(Success(new ExplorerFolder(@"D:\", "Drive", false, true))) };
     private static ExplorerViewModel Create(FakeLoadExplorerRoots? roots = null, FakeLoadExplorerChildren? children = null,
-        FakeGeneratePlaylist? generate = null) => new(roots ?? Roots(), children ?? new(), new FakeInspectPlaylistPresence(), generate ?? new());
+        FakeGeneratePlaylist? generate = null, FakeInspectPlaylistPresence? presence = null, FakeUserDialogService? dialogs = null) =>
+        new(roots ?? Roots(), children ?? new(), presence ?? new FakeInspectPlaylistPresence(), generate ?? new(), dialogs ?? new());
+
+    private sealed class SequenceGenerator(Func<GeneratePlaylistRequest, PlaylistGenerationResult> respond) : IGeneratePlaylist
+    {
+        public Task<PlaylistGenerationResult> ExecuteAsync(GeneratePlaylistRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(respond(request));
+    }
 }

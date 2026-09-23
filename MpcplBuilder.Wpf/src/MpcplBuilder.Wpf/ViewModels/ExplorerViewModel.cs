@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MpcplBuilder.Application.Explorer;
 using MpcplBuilder.Application.Playlists;
+using MpcplBuilder.Wpf.Services;
 
 namespace MpcplBuilder.Wpf.ViewModels;
 
@@ -12,6 +13,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private readonly ILoadExplorerChildren _loadChildren;
     private readonly IInspectPlaylistPresence _inspectPresence;
     private readonly IGeneratePlaylist _generatePlaylist;
+    private readonly IUserDialogService _dialogs;
     private CancellationTokenSource? _operationCancellation;
     private long _operationVersion;
     private bool _isRefreshing;
@@ -29,12 +31,13 @@ public sealed partial class ExplorerViewModel : ObservableObject
     private bool isBusy;
 
     public ExplorerViewModel(ILoadExplorerRoots loadRoots, ILoadExplorerChildren loadChildren,
-        IInspectPlaylistPresence inspectPresence, IGeneratePlaylist generatePlaylist)
+        IInspectPlaylistPresence inspectPresence, IGeneratePlaylist generatePlaylist, IUserDialogService dialogs)
     {
         _loadRoots = loadRoots;
         _loadChildren = loadChildren;
         _inspectPresence = inspectPresence;
         _generatePlaylist = generatePlaylist;
+        _dialogs = dialogs;
     }
 
     public ObservableCollection<FolderNodeViewModel> Roots { get; } = [];
@@ -125,6 +128,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     {
         if (!CanGenerate()) return;
         var folder = SelectedFolder!;
+        var path = folder.FullPath!;
+        var request = IsLongPath ? GeneratePlaylistRequest.Long(path)
+            : IsFullPath ? GeneratePlaylistRequest.Full(path) : GeneratePlaylistRequest.Relative(path);
         var version = ++_operationVersion;
         var cancellation = new CancellationTokenSource();
         _operationCancellation = cancellation;
@@ -133,10 +139,37 @@ public sealed partial class ExplorerViewModel : ObservableObject
         Status = "Generating playlist...";
         try
         {
-            var request = IsLongPath ? GeneratePlaylistRequest.Long(folder.FullPath!)
-                : IsFullPath ? GeneratePlaylistRequest.Full(folder.FullPath!) : GeneratePlaylistRequest.Relative(folder.FullPath!);
+            var exists = await _inspectPresence.ExecuteAsync(path, cancellation.Token);
+            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+            if (exists)
+            {
+                if (!_dialogs.ConfirmOverwrite(System.IO.Path.Combine(path, "Playlist.mpcpl")))
+                {
+                    Status = "Cancelled";
+                    return;
+                }
+                request = request with { OverwriteExisting = true };
+            }
+            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
             var result = await _generatePlaylist.ExecuteAsync(request, cancellation.Token);
-            if (!IsCurrent(version, cancellation)) return;
+            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+            if (result.Status == PlaylistGenerationStatus.OverwriteRequired && !request.OverwriteExisting)
+            {
+                if (!_dialogs.ConfirmOverwrite(System.IO.Path.Combine(path, "Playlist.mpcpl")))
+                {
+                    Status = "Cancelled";
+                    return;
+                }
+                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+                result = await _generatePlaylist.ExecuteAsync(request with { OverwriteExisting = true }, cancellation.Token);
+                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+            }
+            if (result.Status == PlaylistGenerationStatus.Success)
+            {
+                var hasPlaylist = await _inspectPresence.ExecuteAsync(path, cancellation.Token);
+                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+                folder.HasPlaylist = hasPlaylist;
+            }
             Status = result.Status == PlaylistGenerationStatus.Success ? "Done"
                 : result.Status == PlaylistGenerationStatus.OverwriteRequired ? "Playlist already exists; overwrite confirmation required"
                 : result.ErrorMessage ?? "Playlist generation failed";
@@ -175,6 +208,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
 
     private bool IsCurrent(long version, CancellationTokenSource cancellation) =>
         version == _operationVersion && !cancellation.IsCancellationRequested;
+    private bool IsSelectedPath(string path) =>
+        StringComparer.OrdinalIgnoreCase.Equals(SelectedFolder?.FullPath, path);
     private bool CanGenerate() => !IsBusy && SelectedFolder?.CanGenerate == true;
     private bool CanCancel() => IsBusy;
     private bool CanRefresh() => !_isRefreshing && !_isGenerating;
