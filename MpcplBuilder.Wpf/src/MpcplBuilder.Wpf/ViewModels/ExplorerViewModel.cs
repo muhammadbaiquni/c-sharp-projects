@@ -176,11 +176,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            if (version == _operationVersion) Status = "Cancelled";
+            if (IsCurrent(version, cancellation) && IsSelectedPath(path)) Status = "Cancelled";
         }
         catch (Exception exception)
         {
-            if (version == _operationVersion) Status = exception.Message;
+            if (IsCurrent(version, cancellation) && IsSelectedPath(path)) Status = exception.Message;
         }
         finally
         {

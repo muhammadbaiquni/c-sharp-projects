@@ -378,6 +378,52 @@ public sealed class ExplorerViewModelTests
         vm.IsBusy.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Generate_WhenSelectionChangesBeforeLateCancellation_DoesNotShowStaleStatus()
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\", "D", false, true), new ExplorerFolder(@"E:\", "E", false, true))) };
+        var vm = Create(roots: roots, generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.First();
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Last();
+        vm.Status = "New selection";
+
+        pending.SetException(new OperationCanceledException());
+        await generation;
+
+        vm.Status.Should().Be("New selection");
+        vm.IsBusy.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generate_WhenSelectionChangesBeforeLatePresenceException_DoesNotShowStaleError()
+    {
+        var pending = new TaskCompletionSource<bool>();
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => pending.Task };
+        var generator = new FakeGeneratePlaylist();
+        var dialogs = new FakeUserDialogService();
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\", "D", false, true), new ExplorerFolder(@"E:\", "E", false, true))) };
+        var vm = Create(roots: roots, generate: generator, presence: presence, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.First();
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Last();
+        vm.Status = "New selection";
+
+        pending.SetException(new IOException("old folder failed"));
+        await generation;
+
+        generator.Calls.Should().Be(0);
+        vm.Status.Should().Be("New selection");
+        dialogs.Errors.Should().BeEmpty();
+        vm.IsBusy.Should().BeFalse();
+    }
+
     private static FakeLoadExplorerRoots Roots() => new() { Handler = _ => Task.FromResult(Success(new ExplorerFolder(@"D:\", "Drive", false, true))) };
     private static ExplorerViewModel Create(FakeLoadExplorerRoots? roots = null, FakeLoadExplorerChildren? children = null,
         FakeGeneratePlaylist? generate = null, FakeInspectPlaylistPresence? presence = null, FakeUserDialogService? dialogs = null) =>
