@@ -21,20 +21,27 @@ internal sealed class DirectoryTraversal
     public IReadOnlyList<string> EnumerateFiles(string rootPath, CancellationToken cancellationToken)
     {
         var files = new List<string>();
-        var pending = new Stack<string>();
-        pending.Push(rootPath);
+        var pending = new Stack<(string Path, bool IsRoot)>();
+        pending.Push((rootPath, true));
 
-        while (pending.TryPop(out var directory))
+        while (pending.TryPop(out var item))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
-                files.AddRange(_enumerateFiles(directory).ToArray());
-                foreach (var child in _enumerateDirectories(directory).ToArray())
-                    pending.Push(child);
+                foreach (var file in _enumerateFiles(item.Path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    files.Add(file);
+                }
+                foreach (var child in _enumerateDirectories(item.Path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    pending.Push((child, false));
+                }
             }
-            catch (Exception exception) when (IsSkippable(exception))
+            catch (Exception exception) when (!item.IsRoot && IsSkippable(exception))
             {
                 // A single inaccessible directory must not invalidate the whole scan.
             }
@@ -43,20 +50,44 @@ internal sealed class DirectoryTraversal
         return files;
     }
 
+    public bool AnyFile(string rootPath, Func<string, bool> predicate, CancellationToken cancellationToken)
+    {
+        var pending = new Stack<(string Path, bool IsRoot)>();
+        pending.Push((rootPath, true));
+        while (pending.TryPop(out var item))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                foreach (var file in _enumerateFiles(item.Path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (predicate(file)) return true;
+                }
+                foreach (var child in _enumerateDirectories(item.Path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    pending.Push((child, false));
+                }
+            }
+            catch (Exception exception) when (!item.IsRoot && IsSkippable(exception)) { }
+        }
+        return false;
+    }
+
     public IReadOnlyList<string> EnumerateFilesInDirectory(
         string directoryPath,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        var files = new List<string>();
+        foreach (var file in _enumerateFiles(directoryPath))
         {
-            return _enumerateFiles(directoryPath).ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            files.Add(file);
         }
-        catch (Exception exception) when (IsSkippable(exception))
-        {
-            return [];
-        }
+        return files;
     }
 
     private static bool IsSkippable(Exception exception) =>

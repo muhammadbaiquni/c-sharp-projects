@@ -44,6 +44,36 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SelectFolderAsync_InvalidTypedPathUsesInlineStatusWithoutDialog()
+    {
+        var dialogs = new FakeUserDialogService();
+        var result = new FolderInspectionResult("x", FolderInspectionStatus.InvalidFolder, false, null, "invalid");
+        var vm = CreateViewModel(new FakeInspectFolder(Task.FromResult(result)), dialogs: dialogs);
+
+        await vm.SelectFolderAsync("x");
+
+        vm.Status.Should().Be("Invalid folder");
+        dialogs.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Cancel_DuringInspectionCancelsTokenAndWaitsForCompletion()
+    {
+        var pending = new TaskCompletionSource<FolderInspectionResult>();
+        var inspect = new FakeInspectFolder(pending.Task);
+        var vm = CreateViewModel(inspect);
+        var inspection = vm.SelectFolderAsync(@"D:\Media");
+
+        vm.IsBusy.Should().BeTrue();
+        vm.CancelCommand.Execute(null);
+        inspect.Tokens.Single().IsCancellationRequested.Should().BeTrue();
+        vm.IsBusy.Should().BeTrue();
+        pending.SetCanceled(inspect.Tokens.Single());
+        await inspection;
+        vm.IsBusy.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task SelectFolderAsync_ExistingOutputRequiresConfirmation()
     {
         var metadata = new PlaylistOutputMetadata(DateTime.Now, 42);
@@ -119,9 +149,10 @@ public sealed class MainWindowViewModelTests
         vm.CancelCommand.Execute(null);
 
         generator.LastToken.IsCancellationRequested.Should().BeTrue();
-        vm.IsBusy.Should().BeFalse();
+        vm.IsBusy.Should().BeTrue();
         pending.SetCanceled(generator.LastToken);
         await generation;
+        vm.IsBusy.Should().BeFalse();
     }
 
     [Fact]
@@ -140,6 +171,25 @@ public sealed class MainWindowViewModelTests
 
         dialogs.Errors.Should().ContainSingle().Which.Should().Be("Disk full");
         vm.Status.Should().Be("Error");
+    }
+
+    [Fact]
+    public async Task SelectingAnotherFolderWhileGenerationFinishes_DiscardsOldResult()
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var vm = CreateViewModel(generate: generator);
+        await vm.SelectFolderAsync(@"D:\First");
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+
+        await vm.SelectFolderAsync(@"D:\Second");
+        pending.SetResult(new PlaylistGenerationResult(
+            PlaylistGenerationStatus.Success, @"D:\First\Playlist.mpcpl",
+            [new PlaylistEntry(@"D:\First\Movie.mkv", [])], null));
+        await generation;
+
+        vm.RootPath.Should().Be(@"D:\Second");
+        vm.PreviewItems.Should().BeEmpty();
     }
 
     private static Task<FolderInspectionResult> Ready(string path) => Task.FromResult(

@@ -17,7 +17,9 @@ public partial class MainWindowViewModel : ObservableObject
     private CancellationTokenSource? _inspectionCancellation;
     private CancellationTokenSource? _generationCancellation;
     private long _inspectionVersion;
+    private long _generationVersion;
     private bool _suppressRootInspection;
+    private bool _isGenerating;
 
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(GenerateCommand))]
     private string rootPath = string.Empty;
@@ -48,9 +50,15 @@ public partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<string> PreviewItems { get; } = [];
     public int VideosFoundCount => HasVideos ? 1 : 0;
 
-    partial void OnRootPathChanged(string value)
+    partial void OnRootPathChanged(string? oldValue, string newValue)
     {
-        if (!_suppressRootInspection) _ = SelectFolderAsync(value);
+        if (_suppressRootInspection) return;
+        if (_isGenerating)
+        {
+            SetRootPathWithoutInspection(oldValue ?? string.Empty);
+            return;
+        }
+        _ = SelectFolderAsync(newValue);
     }
     partial void OnHasVideosChanged(bool value) => OnPropertyChanged(nameof(VideosFoundCount));
     partial void OnIsBusyChanged(bool value)
@@ -69,6 +77,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public async Task SelectFolderAsync(string path)
     {
+        _generationCancellation?.Cancel();
         var version = Interlocked.Increment(ref _inspectionVersion);
         _inspectionCancellation?.Cancel();
         _inspectionCancellation?.Dispose();
@@ -77,6 +86,7 @@ public partial class MainWindowViewModel : ObservableObject
         SetRootPathWithoutInspection(path);
         HasVideos = IsOutputExists = OverwriteConfirmed = false;
         Status = "Scanning...";
+        IsBusy = true;
 
         try
         {
@@ -93,6 +103,10 @@ public partial class MainWindowViewModel : ObservableObject
             if (version != _inspectionVersion) return;
             Status = "Error";
             _dialogs.ShowError(exception.Message);
+        }
+        finally
+        {
+            if (version == _inspectionVersion && !_isGenerating) IsBusy = false;
         }
     }
 
@@ -117,7 +131,8 @@ public partial class MainWindowViewModel : ObservableObject
             FolderInspectionStatus.InvalidFolder => "Invalid folder",
             _ => "Error"
         };
-        if (!string.IsNullOrWhiteSpace(result.ErrorMessage)) _dialogs.ShowError(result.ErrorMessage);
+        if (result.Status == FolderInspectionStatus.AccessFailure && !string.IsNullOrWhiteSpace(result.ErrorMessage))
+            _dialogs.ShowError(result.ErrorMessage);
     }
 
     private void SetRootPathWithoutInspection(string value)
@@ -134,14 +149,26 @@ public partial class MainWindowViewModel : ObservableObject
         _generationCancellation?.Dispose();
         _generationCancellation = new CancellationTokenSource();
         var token = _generationCancellation.Token;
+        var version = Interlocked.Increment(ref _generationVersion);
+        var rootAtStart = RootPath;
+        _isGenerating = true;
         IsBusy = true;
         Status = "Scanning...";
         PreviewItems.Clear();
         Counts = string.Empty;
         try
         {
-            var result = await _generatePlaylist.ExecuteAsync(
-                SelectedRequest(), token);
+            var result = await _generatePlaylist.ExecuteAsync(SelectedRequest(), token);
+            if (result.Status == PlaylistGenerationStatus.OverwriteRequired)
+            {
+                if (!_dialogs.ConfirmOverwrite(System.IO.Path.Combine(rootAtStart, "Playlist.mpcpl")))
+                {
+                    Status = "Cancelled";
+                    return;
+                }
+                result = await _generatePlaylist.ExecuteAsync(SelectedRequest(overwrite: true), token);
+            }
+            if (version != _generationVersion || RootPath != rootAtStart) return;
             if (result.Status != PlaylistGenerationStatus.Success)
             {
                 Status = "Error";
@@ -156,10 +183,19 @@ public partial class MainWindowViewModel : ObservableObject
             Status = "Done";
             Counts = $"Videos: {result.Entries.Count} (preview shows first 200). Output: {result.OutputPath}";
             OutputInfo = $"✅ Playlist created successfully! ({result.OutputPath})";
+            IsOutputExists = true;
+            OverwriteConfirmed = false;
         }
         catch (OperationCanceledException) { Status = "Cancelled"; }
         catch (Exception exception) { Status = "Error"; _dialogs.ShowError(exception.Message); }
-        finally { IsBusy = false; }
+        finally
+        {
+            if (version == _generationVersion)
+            {
+                _isGenerating = false;
+                IsBusy = false;
+            }
+        }
     }
     private bool CanGenerate() => !IsBusy && !string.IsNullOrWhiteSpace(RootPath) && HasVideos && (!IsOutputExists || OverwriteConfirmed);
 
@@ -173,10 +209,9 @@ public partial class MainWindowViewModel : ObservableObject
         _inspectionCancellation?.Cancel();
         _generationCancellation?.Cancel();
         Status = "Cancelling...";
-        IsBusy = false;
     }
     private bool CanCancel() => IsBusy;
-    private GeneratePlaylistRequest SelectedRequest() => IsLongPath
-        ? GeneratePlaylistRequest.Long(RootPath)
-        : IsFullPath ? GeneratePlaylistRequest.Full(RootPath) : GeneratePlaylistRequest.Relative(RootPath);
+    private GeneratePlaylistRequest SelectedRequest(bool overwrite = false) => IsLongPath
+        ? GeneratePlaylistRequest.Long(RootPath, overwrite)
+        : IsFullPath ? GeneratePlaylistRequest.Full(RootPath, overwrite) : GeneratePlaylistRequest.Relative(RootPath, overwrite);
 }

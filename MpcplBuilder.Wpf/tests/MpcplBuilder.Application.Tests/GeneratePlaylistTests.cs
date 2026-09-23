@@ -47,6 +47,19 @@ public sealed class GeneratePlaylistTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ExistingOutputWithoutApproval_DoesNotWrite()
+    {
+        var media = new FakeMediaFileRepository { Videos = [@"D:\Media\Movie.mkv"] };
+        var output = new FakePlaylistOutput { Metadata = new(DateTime.Now, 42) };
+
+        var result = await new GeneratePlaylist(media, output).ExecuteAsync(
+            GeneratePlaylistRequest.Relative(@"D:\Media"), CancellationToken.None);
+
+        result.Status.Should().Be(PlaylistGenerationStatus.OverwriteRequired);
+        output.WriteCalls.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_OutputFailure_ReturnsOutputFailure()
     {
         var media = new FakeMediaFileRepository { Videos = [@"D:\Media\Movie.mkv"] };

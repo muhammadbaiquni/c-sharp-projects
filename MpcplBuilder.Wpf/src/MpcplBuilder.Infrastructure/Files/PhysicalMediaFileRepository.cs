@@ -21,7 +21,7 @@ public sealed class PhysicalMediaFileRepository : IMediaFileRepository
 
     public Task<bool> HasAnyVideoAsync(string rootPath, CancellationToken cancellationToken) =>
         Task.Run(
-            () => _traversal.EnumerateFiles(rootPath, cancellationToken).Any(SupportedMedia.IsVideo),
+            () => _traversal.AnyFile(rootPath, SupportedMedia.IsVideo, cancellationToken),
             cancellationToken);
 
     public Task<IReadOnlyList<string>> GetVideosAsync(

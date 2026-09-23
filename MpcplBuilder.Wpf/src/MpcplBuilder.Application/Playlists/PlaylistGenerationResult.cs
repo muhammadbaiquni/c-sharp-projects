@@ -7,7 +7,8 @@ public enum PlaylistGenerationStatus
     Success,
     NoVideos,
     AccessFailure,
-    OutputFailure
+    OutputFailure,
+    OverwriteRequired
 }
 
 public sealed record PlaylistGenerationResult(

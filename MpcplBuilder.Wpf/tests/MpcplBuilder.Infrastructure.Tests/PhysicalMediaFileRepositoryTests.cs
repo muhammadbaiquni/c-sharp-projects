@@ -64,4 +64,33 @@ public sealed class PhysicalMediaFileRepositoryTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public void EnumerateFiles_UnauthorizedRoot_PropagatesFailure()
+    {
+        var traversal = new DirectoryTraversal(
+            _ => [],
+            _ => throw new UnauthorizedAccessException("root denied"));
+
+        var act = () => traversal.EnumerateFiles(@"D:\Root", CancellationToken.None);
+
+        act.Should().Throw<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public void EnumerateFiles_CancelledDuringEnumeration_StopsImmediately()
+    {
+        using var cancellation = new CancellationTokenSource();
+        IEnumerable<string> Files(string _)
+        {
+            yield return @"D:\Root\One.mkv";
+            cancellation.Cancel();
+            yield return @"D:\Root\Two.mkv";
+        }
+        var traversal = new DirectoryTraversal(_ => [], Files);
+
+        var act = () => traversal.EnumerateFiles(@"D:\Root", cancellation.Token);
+
+        act.Should().Throw<OperationCanceledException>();
+    }
 }

@@ -11,6 +11,22 @@ public sealed class GeneratePlaylist(
         GeneratePlaylistRequest request,
         CancellationToken cancellationToken)
     {
+        try
+        {
+            var existingOutput = await playlistOutput.GetMetadataAsync(request.RootPath, cancellationToken);
+            if (existingOutput is not null && !request.OverwriteExisting)
+                return new(PlaylistGenerationStatus.OverwriteRequired, null, [], "Playlist.mpcpl already exists.");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (UnauthorizedAccessException exception)
+        {
+            return new(PlaylistGenerationStatus.AccessFailure, null, [], exception.Message);
+        }
+        catch (IOException exception)
+        {
+            return new(PlaylistGenerationStatus.OutputFailure, null, [], exception.Message);
+        }
+
         IReadOnlyList<string> videos;
         try
         {
