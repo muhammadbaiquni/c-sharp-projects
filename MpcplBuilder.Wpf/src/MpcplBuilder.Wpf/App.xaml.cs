@@ -1,7 +1,9 @@
 using System.Windows;
+using MpcplBuilder.Application.Explorer;
 using MpcplBuilder.Application.Folders;
 using MpcplBuilder.Application.Playlists;
 using MpcplBuilder.Infrastructure.Files;
+using MpcplBuilder.Infrastructure.Explorer;
 using MpcplBuilder.Infrastructure.Playlists;
 using MpcplBuilder.Wpf.Services;
 using MpcplBuilder.Wpf.ViewModels;
@@ -20,7 +22,13 @@ public partial class App : System.Windows.Application
             new GeneratePlaylist(mediaFiles, output),
             new WindowsFolderPicker(),
             new WpfUserDialogService());
-        var viewModel = new MainWindowViewModel(defaultViewModel, new ExplorerViewModel());
+        var explorerFileSystem = new PhysicalExplorerFileSystem();
+        var explorerViewModel = new ExplorerViewModel(
+            new LoadExplorerRoots(explorerFileSystem),
+            new LoadExplorerChildren(explorerFileSystem),
+            new InspectPlaylistPresence(explorerFileSystem),
+            new GeneratePlaylist(mediaFiles, output));
+        var viewModel = new MainWindowViewModel(defaultViewModel, explorerViewModel);
         MainWindow = new MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }
