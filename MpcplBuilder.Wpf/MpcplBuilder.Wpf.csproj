@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>ic_playlist_add_128_28561.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="ic_playlist_add_128_28561.png" />
+    <None Remove="playlist.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="ic_playlist_add_128_28561.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="ic_playlist_add_128_28561.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="MpcplBuilder.Wpf.Tests\**\*.cs" />
+  </ItemGroup>
+</Project>
