@@ -15,23 +15,28 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var viewModel = CreateMainWindowViewModel(new WindowsFolderPicker(), new WpfUserDialogService());
+        MainWindow = new MainWindow { DataContext = viewModel };
+        MainWindow.Show();
+    }
+
+    internal static MainWindowViewModel CreateMainWindowViewModel(IFolderPicker folderPicker, IUserDialogService dialogs)
+    {
         var mediaFiles = new PhysicalMediaFileRepository();
         var output = new MpcplPlaylistOutput();
-        var dialogs = new WpfUserDialogService();
+        var generatePlaylist = new GeneratePlaylist(mediaFiles, output);
         var defaultViewModel = new DefaultViewModel(
             new InspectFolder(mediaFiles, output),
-            new GeneratePlaylist(mediaFiles, output),
-            new WindowsFolderPicker(),
+            generatePlaylist,
+            folderPicker,
             dialogs);
         var explorerFileSystem = new PhysicalExplorerFileSystem();
         var explorerViewModel = new ExplorerViewModel(
             new LoadExplorerRoots(explorerFileSystem),
             new LoadExplorerChildren(explorerFileSystem),
             new InspectPlaylistPresence(explorerFileSystem),
-            new GeneratePlaylist(mediaFiles, output),
+            generatePlaylist,
             dialogs);
-        var viewModel = new MainWindowViewModel(defaultViewModel, explorerViewModel);
-        MainWindow = new MainWindow { DataContext = viewModel };
-        MainWindow.Show();
+        return new MainWindowViewModel(defaultViewModel, explorerViewModel);
     }
 }
