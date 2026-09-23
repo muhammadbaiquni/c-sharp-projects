@@ -1,37 +1,50 @@
 # MPC Playlist Builder
 
-A WPF application that recursively scans a video folder and creates an MPC-HC/MPC-BE playlist (`.mpcpl`) with automatic subtitle matching.
+A WPF application that creates MPC-HC/MPC-BE playlists (`.mpcpl`) with automatic subtitle matching. The **Explorer** tab navigates folders from This PC; the **Default** tab keeps the browse-and-preview workflow. Each tab has its own selection and operation state.
 
 ## Features
 
-### 1. Relative Paths (Default, Portable)
+### Explorer Tab
+
+- Starts at **This PC** and shows drives and folders only. Expand a folder to load its immediate children; expanding does not recursively scan its subtree.
+- Select one active folder at a time. Both green and yellow folders can be selected. A **green** folder icon means `Playlist.mpcpl` exists directly in that folder; **yellow** means it does not. A playlist in a descendant does not change its parent's icon.
+- Uses **Relative Path** by default. **Full Path** and **Long Path** are also available.
+- **Generate** recursively includes supported videos beneath the selected folder and writes `Playlist.mpcpl` in that folder. The icon updates when generation succeeds.
+- **Refresh** reloads drives and folder status, retaining the expanded folders and selection when those paths still exist.
+- If the playlist already exists, **Generate** asks for overwrite confirmation. Choosing **No** leaves the file unchanged.
+
+### Default Tab
+
+Default is initially active and keeps the browse, inspection, preview, and generation workflow described below.
+
+#### 1. Relative Paths (Default, Portable)
 
 - Stores paths relative to the selected root folder.
 - Keeps the playlist working when the entire folder is moved to another location or drive.
 - Example: `Subfolder\Movie.mkv` instead of `D:\Videos\Subfolder\Movie.mkv`.
 - Recommended for maximum portability.
 
-### 2. Full Paths (Absolute)
+#### 2. Full Paths (Absolute)
 
 - Stores full absolute paths.
 - Keeps media paths valid when only the `.mpcpl` file is moved.
 - The playlist will stop working if the video folder itself is moved.
 - Example: `D:\Videos\Subfolder\Movie.mkv`.
 
-### 3. Long Paths (`\\?\`)
+#### 3. Long Paths (`\\?\`)
 
 - Stores paths using the Windows long-path prefix (`\\?\`).
 - Supports paths longer than 260 characters.
 - Example: `\\?\D:\Videos\Very\Long\Path\Subfolder\Movie.mkv`.
 - Available on Windows only.
 
-### 4. Existing Playlist Detection
+#### 4. Existing Playlist Detection
 
 - Automatically detects an existing `Playlist.mpcpl` file in the selected folder.
 - Displays its last-write date and file size.
 - Requests confirmation before overwriting it.
 
-### 5. Automatic Subtitle Matching
+#### 5. Automatic Subtitle Matching
 
 Subtitles are matched automatically when their filenames correspond to the video filename:
 
@@ -49,6 +62,15 @@ Subtitles are matched automatically when their filenames correspond to the video
 
 ## Usage
 
+### Explorer
+
+1. Open **Explorer**, expand **This PC**, then expand drives and folders to find the folder you want. Select that folder; only one folder is active.
+2. Choose **Relative Path** (the default), **Full Path**, or **Long Path**.
+3. Click **Generate**. The app scans the selected folder recursively and saves `Playlist.mpcpl` there. If the file already exists, confirm or cancel the overwrite prompt.
+4. Click **Refresh** to reload drives, folders, and direct playlist status. Existing paths retain their expanded and selected state.
+
+### Default
+
 1. Click **Browse...** and select the root folder that contains your videos.
    - The application scans the folder recursively.
    - If a playlist already exists, the application displays its file information and asks whether overwriting should be enabled.
@@ -62,7 +84,7 @@ Subtitles are matched automatically when their filenames correspond to the video
 4. Click **Clear** to clear the preview. This does not delete the generated playlist.
 5. The application saves `Playlist.mpcpl` in the selected root folder.
 
-## Buttons
+## Default Tab Buttons
 
 | Button | Function |
 | --- | --- |
@@ -71,7 +93,14 @@ Subtitles are matched automatically when their filenames correspond to the video
 | **Clear** | Clears the preview without deleting the playlist file. |
 | **Cancel** | Cancels the active scan or playlist generation operation. |
 
-## Status Indicators
+## Explorer Tab Buttons
+
+| Button | Function |
+| --- | --- |
+| **Generate** | Creates `Playlist.mpcpl` for the selected folder and its descendant videos. |
+| **Refresh** | Reloads drives, folders, and direct playlist status. |
+
+## Default Tab Status Indicators
 
 ### Output Information
 
@@ -109,7 +138,7 @@ tests/
 
 The Domain project has no project dependencies. Application depends only on Domain. Infrastructure implements Application ports and uses Domain policies. WPF composes the application and infrastructure at startup.
 
-The test suite follows a test-first workflow and covers media policies, path formatting, application use cases, real filesystem integration, MPCPL byte compatibility, ViewModel command state, cancellation, stale operation protection, and WPF bindings.
+The test suite follows a test-first workflow and covers media policies, path formatting, application use cases, real filesystem integration, MPCPL byte compatibility, ViewModel command state, cancellation, stale operation protection, WPF bindings, and startup composition.
 
 ### Path Mode Comparison
 

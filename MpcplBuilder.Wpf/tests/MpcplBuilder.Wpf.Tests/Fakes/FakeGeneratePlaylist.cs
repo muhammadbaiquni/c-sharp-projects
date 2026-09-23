@@ -8,12 +8,14 @@ internal sealed class FakeGeneratePlaylist : IGeneratePlaylist
         new PlaylistGenerationResult(PlaylistGenerationStatus.Success, "Playlist.mpcpl", [], null));
     public int Calls { get; private set; }
     public CancellationToken LastToken { get; private set; }
+    public GeneratePlaylistRequest? LastRequest { get; private set; }
 
     public Task<PlaylistGenerationResult> ExecuteAsync(
         GeneratePlaylistRequest request,
         CancellationToken cancellationToken)
     {
         Calls++;
+        LastRequest = request;
         LastToken = cancellationToken;
         return Response;
     }

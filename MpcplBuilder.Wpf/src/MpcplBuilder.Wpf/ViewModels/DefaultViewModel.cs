@@ -6,9 +6,9 @@ using MpcplBuilder.Application.Folders;
 using MpcplBuilder.Application.Playlists;
 using MpcplBuilder.Wpf.Services;
 
-namespace MpcplBuilder.Wpf;
+namespace MpcplBuilder.Wpf.ViewModels;
 
-public partial class MainWindowViewModel : ObservableObject
+public partial class DefaultViewModel : ObservableObject
 {
     private readonly IInspectFolder _inspectFolder;
     private readonly IGeneratePlaylist _generatePlaylist;
@@ -37,7 +37,7 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private bool isFullPath;
     [ObservableProperty] private bool isLongPath;
 
-    public MainWindowViewModel(IInspectFolder inspectFolder, IGeneratePlaylist generatePlaylist,
+    public DefaultViewModel(IInspectFolder inspectFolder, IGeneratePlaylist generatePlaylist,
         IFolderPicker folderPicker, IUserDialogService dialogs)
     {
         _inspectFolder = inspectFolder;

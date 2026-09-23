@@ -1,0 +1,106 @@
+<UserControl x:Class="MpcplBuilder.Wpf.Views.ExplorerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:MpcplBuilder.Wpf.ViewModels"
+             xmlns:behaviors="clr-namespace:MpcplBuilder.Wpf.Behaviors"
+             xmlns:converters="clr-namespace:MpcplBuilder.Wpf.Converters"
+             Loaded="OnLoaded">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Styles/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <converters:FolderStatusToBrushConverter x:Key="FolderStatusBrush"
+                PlaylistBrush="{StaticResource GreenFolderBrush}" EmptyBrush="{StaticResource YellowFolderBrush}" />
+            <HierarchicalDataTemplate DataType="{x:Type vm:FolderNodeViewModel}" ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                    <Path Width="18" Height="15" Margin="0,0,6,0" Stretch="Uniform"
+                          Data="{StaticResource FolderGeometry}" Fill="{Binding HasPlaylist, Converter={StaticResource FolderStatusBrush}}"
+                          Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" StrokeThickness="0.7"
+                          Focusable="False" />
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding PlaylistStatus}" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FullPath}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </HierarchicalDataTemplate>
+            <Style x:Key="FolderItemStyle" TargetType="TreeViewItem">
+                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                <Setter Property="AutomationProperties.Name">
+                    <Setter.Value>
+                        <MultiBinding StringFormat="{}{0}: {1}">
+                            <Binding Path="DisplayName" />
+                            <Binding Path="PlaylistStatus" />
+                        </MultiBinding>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="AutomationProperties.HelpText">
+                    <Setter.Value>
+                        <MultiBinding StringFormat="{}{0} {1}">
+                            <Binding Path="PlaylistStatus" />
+                            <Binding Path="Status" />
+                        </MultiBinding>
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="ToolTip" Value="{Binding Path=(AutomationProperties.HelpText), RelativeSource={RelativeSource Self}}" />
+                <Style.Triggers>
+                    <!-- Successful loads store a status snapshot; announce the current playlist state. -->
+                    <DataTrigger Binding="{Binding Status}" Value="No playlist">
+                        <Setter Property="AutomationProperties.HelpText" Value="{Binding PlaylistStatus}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Status}" Value="Playlist present">
+                        <Setter Property="AutomationProperties.HelpText" Value="{Binding PlaylistStatus}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                        <Setter Property="Focusable" Value="False" />
+                        <Setter Property="IsEnabled" Value="False" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <WrapPanel Grid.Row="0">
+            <TextBlock Text="Path Type:" VerticalAlignment="Center" Margin="0,0,16,0" />
+            <RadioButton x:Name="RelativePathRadioButton" Content="Relative" GroupName="ExplorerPathType"
+                         IsChecked="{Binding IsRelativePath, Mode=TwoWay}" Margin="0,0,16,0" VerticalAlignment="Center"
+                         AutomationProperties.Name="Relative path" ToolTip="Paths relative to the selected folder" />
+            <RadioButton x:Name="FullPathRadioButton" Content="Full" GroupName="ExplorerPathType"
+                         IsChecked="{Binding IsFullPath, Mode=TwoWay}" Margin="0,0,16,0" VerticalAlignment="Center"
+                         AutomationProperties.Name="Full path" ToolTip="Full file paths" />
+            <RadioButton x:Name="LongPathRadioButton" Content="Long" GroupName="ExplorerPathType"
+                         IsChecked="{Binding IsLongPath, Mode=TwoWay}" Margin="0,0,24,0" VerticalAlignment="Center"
+                         AutomationProperties.Name="Long path" ToolTip="Full paths with the long-path prefix (\\?\)" />
+            <Button x:Name="GenerateButton" Content="Generate" Command="{Binding GenerateCommand}" MinWidth="100"
+                    Margin="0,0,8,0" AutomationProperties.Name="Generate playlist for selected folder" />
+            <Button x:Name="RefreshButton" Content="Refresh" Command="{Binding RefreshCommand}" MinWidth="90"
+                    Margin="0,0,8,0" AutomationProperties.Name="Refresh folders" />
+            <Button x:Name="CancelButton" Content="_Cancel" Command="{Binding CancelCommand}" MinWidth="90"
+                    AutomationProperties.Name="Cancel Explorer operation" />
+        </WrapPanel>
+        <GroupBox Grid.Row="2" Header="Folders">
+            <TreeView x:Name="FoldersTreeView" ItemsSource="{Binding Roots}"
+                      ItemContainerStyle="{StaticResource FolderItemStyle}"
+                      behaviors:TreeViewSelection.IsEnabled="True"
+                      behaviors:TreeViewSelection.SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
+                      AutomationProperties.Name="Folders" />
+        </GroupBox>
+        <TextBlock x:Name="StatusTextBlock" Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap"
+                   AutomationProperties.Name="Explorer status" AutomationProperties.LiveSetting="Polite" />
+    </Grid>
+</UserControl>

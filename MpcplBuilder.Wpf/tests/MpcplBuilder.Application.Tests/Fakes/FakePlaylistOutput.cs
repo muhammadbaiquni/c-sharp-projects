@@ -24,6 +24,7 @@ internal sealed class FakePlaylistOutput : IPlaylistOutput
         string rootPath,
         IReadOnlyList<PlaylistEntry> entries,
         PathMode pathMode,
+        bool overwriteExisting,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
