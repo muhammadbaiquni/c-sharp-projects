@@ -3,6 +3,7 @@ namespace MpcplBuilder.Application.Explorer;
 public enum ExplorerLoadStatus
 {
     Success,
+    PartialAccess,
     Missing,
     AccessFailure
 }

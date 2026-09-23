@@ -56,6 +56,23 @@ public sealed class ExplorerUseCaseTests
             (@"D:\Media\A", false), (@"D:\Media\B", true));
     }
 
+    [Fact]
+    public async Task LoadChildren_PartialAccess_PreservesAccessibleFoldersAndWarning()
+    {
+        var fileSystem = new FakeExplorerFileSystem
+        {
+            Children = { [@"D:\Media"] = [@"D:\Media\Accessible"] },
+            ChildAccessWarning = "Cannot inspect another child: denied"
+        };
+
+        var result = await new LoadExplorerChildren(fileSystem)
+            .ExecuteAsync(@"D:\Media", CancellationToken.None);
+
+        result.Status.Should().Be(ExplorerLoadStatus.PartialAccess);
+        result.Folders.Select(folder => folder.Path).Should().Equal(@"D:\Media\Accessible");
+        result.ErrorMessage.Should().Contain("denied");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

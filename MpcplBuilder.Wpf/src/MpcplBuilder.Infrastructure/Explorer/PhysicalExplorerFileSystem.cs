@@ -8,12 +8,14 @@ public sealed class PhysicalExplorerFileSystem : IExplorerFileSystem
     private readonly Func<string, IEnumerable<string>> _enumerateDirectories;
 
     public PhysicalExplorerFileSystem()
-        : this(DriveInfo.GetDrives, Directory.EnumerateDirectories)
+        : this(
+            () => DriveInfo.GetDrives().Select(drive => (IExplorerDriveSnapshot)new PhysicalExplorerDriveSnapshot(drive)),
+            Directory.EnumerateDirectories)
     {
     }
 
     internal PhysicalExplorerFileSystem(
-        Func<DriveInfo[]> getDrives,
+        Func<IEnumerable<IExplorerDriveSnapshot>> getDrives,
         Func<string, IEnumerable<string>> enumerateDirectories)
     {
         _driveCatalog = new DriveCatalog(getDrives);
@@ -23,19 +25,32 @@ public sealed class PhysicalExplorerFileSystem : IExplorerFileSystem
     public Task<IReadOnlyList<string>> GetDrivesAsync(CancellationToken cancellationToken) =>
         Task.Run(() => _driveCatalog.GetReadyRoots(cancellationToken), cancellationToken);
 
-    public Task<IReadOnlyList<string>> GetChildFoldersAsync(string path, CancellationToken cancellationToken) =>
-        Task.Run<IReadOnlyList<string>>(() =>
+    public Task<ExplorerChildFoldersResult> GetChildFoldersAsync(string path, CancellationToken cancellationToken) =>
+        Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var folders = new List<string>();
-            foreach (var folder in _enumerateDirectories(path))
+            try
+            {
+                foreach (var folder in _enumerateDirectories(path))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    folders.Add(folder);
+                }
+            }
+            catch (Exception exception) when (
+                folders.Count > 0 &&
+                exception is UnauthorizedAccessException or IOException &&
+                exception is not (DirectoryNotFoundException or DriveNotFoundException))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                folders.Add(folder);
+                return new ExplorerChildFoldersResult(
+                    Array.AsReadOnly(folders.ToArray()),
+                    $"Some child folders of '{path}' could not be listed: {exception.Message}");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            return folders;
+            return new ExplorerChildFoldersResult(Array.AsReadOnly(folders.ToArray()), null);
         }, cancellationToken);
 
     public Task<bool> HasPlaylistAsync(string path, CancellationToken cancellationToken) =>

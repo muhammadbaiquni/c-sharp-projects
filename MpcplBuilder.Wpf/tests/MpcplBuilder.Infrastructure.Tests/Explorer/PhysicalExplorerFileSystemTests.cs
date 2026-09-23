@@ -15,7 +15,8 @@ public sealed class PhysicalExplorerFileSystemTests
         var result = await new PhysicalExplorerFileSystem()
             .GetChildFoldersAsync(temp.Path, CancellationToken.None);
 
-        result.Should().Equal(child);
+        result.Paths.Should().Equal(child);
+        result.AccessWarning.Should().BeNull();
     }
 
     [Fact]
@@ -48,17 +49,49 @@ public sealed class PhysicalExplorerFileSystemTests
     }
 
     [Fact]
-    public async Task GetDrivesAsync_ReflectsDriveRemovalBetweenCalls()
+    public async Task GetDrivesAsync_IncludesReadySupportedTypesAndExcludesUnreadyDrives()
     {
-        var root = Path.GetPathRoot(Path.GetTempPath())!;
-        var present = true;
         var fileSystem = new PhysicalExplorerFileSystem(
-            () => present ? [new DriveInfo(root)] : [],
+            () =>
+            [
+                new TestDrive(DriveType.Fixed, true, @"C:\"),
+                new TestDrive(DriveType.Removable, true, @"D:\"),
+                new TestDrive(DriveType.Network, true, @"E:\"),
+                new TestDrive(DriveType.Ram, true, @"F:\"),
+                new TestDrive(DriveType.Fixed, false, @"G:\"),
+                new TestDrive(DriveType.CDRom, true, @"H:\")
+            ],
             _ => []);
 
-        (await fileSystem.GetDrivesAsync(CancellationToken.None)).Should().ContainSingle().Which.Should().Be(root);
+        (await fileSystem.GetDrivesAsync(CancellationToken.None)).Should().Equal(
+            @"C:\", @"D:\", @"E:\", @"F:\");
+    }
+
+    [Fact]
+    public async Task GetDrivesAsync_ReflectsDriveRemovalBetweenCalls()
+    {
+        var present = true;
+        var fileSystem = new PhysicalExplorerFileSystem(
+            () => present ? [new TestDrive(DriveType.Removable, true, @"R:\")] : [],
+            _ => []);
+
+        (await fileSystem.GetDrivesAsync(CancellationToken.None)).Should().Equal(@"R:\");
         present = false;
         (await fileSystem.GetDrivesAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetDrivesAsync_SkipsDriveThatFailsInspection()
+    {
+        var fileSystem = new PhysicalExplorerFileSystem(
+            () =>
+            [
+                new TestDrive(DriveType.Removable, () => throw new DriveNotFoundException("removed"), @"R:\"),
+                new TestDrive(DriveType.Fixed, true, @"C:\")
+            ],
+            _ => []);
+
+        (await fileSystem.GetDrivesAsync(CancellationToken.None)).Should().Equal(@"C:\");
     }
 
     [Fact]
@@ -73,7 +106,7 @@ public sealed class PhysicalExplorerFileSystemTests
     }
 
     [Fact]
-    public async Task GetChildFoldersAsync_PropagatesInaccessibleChild()
+    public async Task GetChildFoldersAsync_PreservesAccessibleSiblingWhenLaterChildIsInaccessible()
     {
         IEnumerable<string> Enumerate(string _)
         {
@@ -84,7 +117,45 @@ public sealed class PhysicalExplorerFileSystemTests
         var fileSystem = new PhysicalExplorerFileSystem(
             () => [], Enumerate);
 
+        var result = await fileSystem.GetChildFoldersAsync("root", CancellationToken.None);
+
+        result.Paths.Should().Equal("first");
+        result.AccessWarning.Should().Contain("denied");
+    }
+
+    [Fact]
+    public async Task GetChildFoldersAsync_PropagatesMissingDriveAfterFirstChild()
+    {
+        IEnumerable<string> Enumerate(string _)
+        {
+            yield return "first";
+            throw new DriveNotFoundException("removed");
+        }
+
+        var fileSystem = new PhysicalExplorerFileSystem(() => [], Enumerate);
+
         var action = () => fileSystem.GetChildFoldersAsync("root", CancellationToken.None);
-        await action.Should().ThrowAsync<UnauthorizedAccessException>();
+        await action.Should().ThrowAsync<DriveNotFoundException>();
+    }
+
+    private sealed class TestDrive : IExplorerDriveSnapshot
+    {
+        private readonly Func<bool> _isReady;
+
+        public TestDrive(DriveType type, bool isReady, string rootPath)
+            : this(type, () => isReady, rootPath)
+        {
+        }
+
+        public TestDrive(DriveType type, Func<bool> isReady, string rootPath)
+        {
+            Type = type;
+            _isReady = isReady;
+            RootPath = rootPath;
+        }
+
+        public DriveType Type { get; }
+        public bool IsReady => _isReady();
+        public string RootPath { get; }
     }
 }

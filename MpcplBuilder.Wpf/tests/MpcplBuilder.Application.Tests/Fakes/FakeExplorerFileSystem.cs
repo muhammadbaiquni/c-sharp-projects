@@ -7,6 +7,7 @@ internal sealed class FakeExplorerFileSystem : IExplorerFileSystem
     public IReadOnlyList<string> Drives { get; set; } = [];
     public Dictionary<string, IReadOnlyList<string>> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> PlaylistFolders { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public string? ChildAccessWarning { get; set; }
     public Exception? ExceptionToThrow { get; set; }
     public bool IgnoreCancellation { get; set; }
     public Action? OnGetDrives { get; set; }
@@ -20,11 +21,12 @@ internal sealed class FakeExplorerFileSystem : IExplorerFileSystem
         return Task.FromResult(Drives);
     }
 
-    public Task<IReadOnlyList<string>> GetChildFoldersAsync(string path, CancellationToken cancellationToken)
+    public Task<ExplorerChildFoldersResult> GetChildFoldersAsync(string path, CancellationToken cancellationToken)
     {
         Check(cancellationToken);
         OnGetChildFolders?.Invoke();
-        return Task.FromResult(Children.GetValueOrDefault(path) ?? []);
+        return Task.FromResult(new ExplorerChildFoldersResult(
+            Children.GetValueOrDefault(path) ?? [], ChildAccessWarning));
     }
 
     public Task<bool> HasPlaylistAsync(string path, CancellationToken cancellationToken)
