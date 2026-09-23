@@ -54,6 +54,26 @@ public sealed class FolderNodeViewModelTests
     }
 
     [Fact]
+    public async Task Expand_WhenFolderDisappeared_MarksUnavailableAndNotifiesGenerationEligibility()
+    {
+        var loader = new FakeLoadExplorerChildren
+        {
+            Handler = (_, _) => Task.FromResult(new ExplorerLoadResult(ExplorerLoadStatus.Missing, [], "Folder was removed"))
+        };
+        var node = Create(loader);
+        var changed = new List<string?>();
+        node.PropertyChanged += (_, args) => changed.Add(args.PropertyName);
+
+        await node.ExpandAsync();
+
+        node.IsAvailable.Should().BeFalse();
+        node.CanGenerate.Should().BeFalse();
+        node.Children.Should().BeEmpty();
+        node.Status.Should().Be("Folder was removed");
+        changed.Should().Contain(nameof(FolderNodeViewModel.IsAvailable)).And.Contain(nameof(FolderNodeViewModel.CanGenerate));
+    }
+
+    [Fact]
     public async Task PartialAccess_KeepsUsableChildrenAndWarning()
     {
         var loader = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(new ExplorerLoadResult(

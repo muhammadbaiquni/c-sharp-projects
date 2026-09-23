@@ -19,6 +19,7 @@ public sealed class MpcplPlaylistOutputTests
             temp.Path,
             [new PlaylistEntry(video1, [subtitle]), new PlaylistEntry(video2, [])],
             PathMode.Relative,
+            overwriteExisting: false,
             CancellationToken.None);
 
         File.ReadAllText(path).Should().Be(
@@ -52,6 +53,7 @@ public sealed class MpcplPlaylistOutputTests
             temp.Path,
             [new PlaylistEntry(temp.PathFor("Movie.mkv"), [])],
             PathMode.Relative,
+            overwriteExisting: false,
             cancellation.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();

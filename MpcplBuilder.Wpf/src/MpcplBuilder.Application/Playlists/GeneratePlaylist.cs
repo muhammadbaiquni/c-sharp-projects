@@ -60,12 +60,17 @@ public sealed class GeneratePlaylist(
                 request.RootPath,
                 entries,
                 request.PathMode,
+                request.OverwriteExisting,
                 cancellationToken);
             return new(PlaylistGenerationStatus.Success, outputPath, entries, null);
         }
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (PlaylistOverwriteRequiredException exception)
+        {
+            return new(PlaylistGenerationStatus.OverwriteRequired, null, entries, exception.Message);
         }
         catch (UnauthorizedAccessException exception)
         {

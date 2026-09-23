@@ -54,6 +54,27 @@ public sealed class ExplorerViewModelTests
     }
 
     [Fact]
+    public async Task Expand_WhenSelectedFolderDisappeared_DisablesGenerateAfterLoadSettles()
+    {
+        var children = new FakeLoadExplorerChildren
+        {
+            Handler = (_, _) => Task.FromResult(new ExplorerLoadResult(ExplorerLoadStatus.Missing, [], "Drive was removed"))
+        };
+        var vm = Create(children: children);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.GenerateCommand.CanExecute(null).Should().BeTrue();
+        var eligibility = new List<bool>();
+        vm.GenerateCommand.CanExecuteChanged += (_, _) => eligibility.Add(vm.GenerateCommand.CanExecute(null));
+
+        await vm.SelectedFolder.ExpandAsync();
+
+        vm.IsBusy.Should().BeFalse();
+        vm.GenerateCommand.CanExecute(null).Should().BeFalse();
+        eligibility.Should().NotBeEmpty().And.OnlyContain(enabled => !enabled);
+    }
+
+    [Fact]
     public async Task Refresh_RemovedDriveClearsSelection()
     {
         var roots = Roots();
@@ -313,18 +334,22 @@ public sealed class ExplorerViewModelTests
         vm.SelectedFolder.Should().BeSameAs(node);
     }
 
-    [Fact]
-    public async Task Generate_WhenOutputFails_LeavesSelectedNodeYellow()
+    [Theory]
+    [InlineData(PlaylistGenerationStatus.NoVideos)]
+    [InlineData(PlaylistGenerationStatus.AccessFailure)]
+    [InlineData(PlaylistGenerationStatus.OutputFailure)]
+    public async Task Generate_WhenGenerationFails_ShowsOneErrorAndLeavesSelectedNodeYellow(PlaylistGenerationStatus failure)
     {
         var generator = new FakeGeneratePlaylist { Response = Task.FromResult(
-            new PlaylistGenerationResult(PlaylistGenerationStatus.OutputFailure, null, [], "disk error")) };
+            new PlaylistGenerationResult(failure, null, [], "generation error")) };
         var inspections = 0;
         var presence = new FakeInspectPlaylistPresence { Handler = (_, _) =>
         {
             inspections++;
             return Task.FromResult(false);
         } };
-        var vm = Create(generate: generator, presence: presence);
+        var dialogs = new FakeUserDialogService();
+        var vm = Create(generate: generator, presence: presence, dialogs: dialogs);
         await vm.InitializeCommand.ExecuteAsync(null);
         var node = vm.Roots.Single().Children.Single();
         vm.SelectedFolder = node;
@@ -333,7 +358,67 @@ public sealed class ExplorerViewModelTests
 
         inspections.Should().Be(1);
         node.HasPlaylist.Should().BeFalse();
-        vm.Status.Should().Be("disk error");
+        vm.Status.Should().Be("generation error");
+        dialogs.Errors.Should().Equal("generation error");
+    }
+
+    [Theory]
+    [InlineData("presence")]
+    [InlineData("generation")]
+    [InlineData("postwrite presence")]
+    public async Task Generate_WhenCurrentOperationThrows_ShowsOneError(string failureSource)
+    {
+        var generator = new FakeGeneratePlaylist();
+        if (failureSource == "generation")
+            generator.Response = Task.FromException<PlaylistGenerationResult>(new IOException("current failure"));
+        var inspections = 0;
+        var presence = new FakeInspectPlaylistPresence
+        {
+            Handler = (_, _) => ++inspections == 1 && failureSource == "presence"
+                || inspections == 2 && failureSource == "postwrite presence"
+                ? Task.FromException<bool>(new IOException("current failure")) : Task.FromResult(false)
+        };
+        var dialogs = new FakeUserDialogService();
+        var vm = Create(generate: generator, presence: presence, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.Errors.Should().Equal("current failure");
+        vm.Status.Should().Be("current failure");
+        vm.SelectedFolder.HasPlaylist.Should().BeFalse();
+        vm.IsBusy.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Generate_WhenFailureIsStale_DoesNotShowError(bool cancel, bool throws)
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var dialogs = new FakeUserDialogService();
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\", "D", false, true), new ExplorerFolder(@"E:\", "E", false, true))) };
+        var vm = Create(roots: roots, generate: generator, dialogs: dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var original = vm.Roots.Single().Children.First();
+        vm.SelectedFolder = original;
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        if (cancel) vm.CancelCommand.Execute(null);
+        else vm.SelectedFolder = vm.Roots.Single().Children.Last();
+
+        if (throws) pending.SetException(new IOException("stale failure"));
+        else pending.SetResult(new(PlaylistGenerationStatus.OutputFailure, null, [], "stale failure"));
+        await generation;
+
+        dialogs.Errors.Should().BeEmpty();
+        vm.Status.Should().Be(cancel ? "Cancelled" : "Ready");
+        original.HasPlaylist.Should().BeFalse();
+        vm.IsBusy.Should().BeFalse();
     }
 
     [Fact]
@@ -341,12 +426,20 @@ public sealed class ExplorerViewModelTests
     {
         var pending = new TaskCompletionSource<PlaylistGenerationResult>();
         var generator = new FakeGeneratePlaylist { Response = pending.Task };
-        var vm = Create(generate: generator);
+        var roots = Roots();
+        var vm = Create(roots: roots, generate: generator);
         await vm.InitializeCommand.ExecuteAsync(null);
         var node = vm.Roots.Single().Children.Single();
         vm.SelectedFolder = node;
         var generation = vm.GenerateCommand.ExecuteAsync(null);
         vm.CancelCommand.Execute(null);
+        vm.IsBusy.Should().BeTrue("cancellation is only a request until the generator settles");
+        vm.RefreshCommand.CanExecute(null).Should().BeFalse();
+        vm.GenerateCommand.CanExecute(null).Should().BeFalse();
+        vm.Status.Should().Be("Cancelling...");
+        await vm.RefreshAsync();
+        roots.Tokens.Should().ContainSingle("refresh must not race a generator that is still running");
+        vm.SelectedFolder.Should().BeSameAs(node);
         pending.SetResult(new PlaylistGenerationResult(PlaylistGenerationStatus.Success, @"D:\Playlist.mpcpl", [], null));
         await generation;
 
@@ -354,6 +447,8 @@ public sealed class ExplorerViewModelTests
         node.HasPlaylist.Should().BeFalse();
         vm.Status.Should().Be("Cancelled");
         vm.IsBusy.Should().BeFalse();
+        vm.RefreshCommand.CanExecute(null).Should().BeTrue();
+        vm.GenerateCommand.CanExecute(null).Should().BeTrue();
     }
 
     [Fact]
@@ -376,6 +471,33 @@ public sealed class ExplorerViewModelTests
         first.HasPlaylist.Should().BeFalse();
         vm.SelectedFolder.Should().BeSameAs(second);
         vm.IsBusy.Should().BeFalse();
+        vm.Status.Should().Be("Ready");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Generate_WhenSelectionChangesAroundCancellation_SettlesNeutralStatus(bool cancelBeforeSelection)
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\", "D", false, true), new ExplorerFolder(@"E:\", "E", false, true))) };
+        var vm = Create(roots: roots, generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.First();
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+        if (cancelBeforeSelection) vm.CancelCommand.Execute(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Last();
+        if (!cancelBeforeSelection) vm.CancelCommand.Execute(null);
+
+        pending.SetException(new OperationCanceledException());
+        await generation;
+
+        vm.SelectedFolder.FullPath.Should().Be(@"E:\");
+        vm.SelectedFolder.HasPlaylist.Should().BeFalse();
+        vm.IsBusy.Should().BeFalse();
+        vm.Status.Should().Be("Ready");
     }
 
     [Fact]

@@ -26,20 +26,22 @@ public sealed class MpcplPlaylistOutput : IPlaylistOutput
         string rootPath,
         IReadOnlyList<PlaylistEntry> entries,
         PathMode pathMode,
+        bool overwriteExisting,
         CancellationToken cancellationToken) =>
-        Task.Run(() => Write(rootPath, entries, pathMode, cancellationToken), cancellationToken);
+        Task.Run(() => Write(rootPath, entries, pathMode, overwriteExisting, cancellationToken), cancellationToken);
 
     private static string Write(
         string rootPath,
         IReadOnlyList<PlaylistEntry> entries,
         PathMode pathMode,
+        bool overwriteExisting,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(rootPath);
         var outputPath = GetOutputPath(rootPath);
 
-        using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var stream = OpenOutput(outputPath, overwriteExisting);
         using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true))
         {
             NewLine = "\r\n"
@@ -62,6 +64,20 @@ public sealed class MpcplPlaylistOutput : IPlaylistOutput
         }
 
         return outputPath;
+    }
+
+    private static FileStream OpenOutput(string outputPath, bool overwriteExisting)
+    {
+        try
+        {
+            // CreateNew enforces consent atomically even if the destination appeared during discovery.
+            return new FileStream(outputPath, overwriteExisting ? FileMode.Create : FileMode.CreateNew,
+                FileAccess.Write, FileShare.None);
+        }
+        catch (IOException exception) when (!overwriteExisting && File.Exists(outputPath))
+        {
+            throw new PlaylistOverwriteRequiredException(outputPath, exception);
+        }
     }
 
     private static string Format(string path, string rootPath, PathMode pathMode) =>

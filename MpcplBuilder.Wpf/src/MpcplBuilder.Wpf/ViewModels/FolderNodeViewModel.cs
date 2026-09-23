@@ -15,6 +15,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
     [ObservableProperty] private bool isExpanded;
     [ObservableProperty] private bool isLoading;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(CanGenerate))] private bool isAvailable;
     [ObservableProperty] private string status = string.Empty;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(IconKey)), NotifyPropertyChangedFor(nameof(PlaylistStatus))]
     private bool hasPlaylist;
@@ -50,7 +51,6 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
     public string? FullPath { get; }
     public string DisplayName { get; }
-    public bool IsAvailable { get; }
     public bool IsPlaceholder { get; }
     public bool CanGenerate => FullPath is not null && IsAvailable && !IsPlaceholder;
     public ObservableCollection<FolderNodeViewModel> Children { get; } = [];
@@ -99,7 +99,15 @@ public sealed partial class FolderNodeViewModel : ObservableObject
                     ? result.ErrorMessage ?? "Some folders could not be read"
                     : PlaylistStatus;
             }
-            else Status = result.ErrorMessage ?? (result.Status == ExplorerLoadStatus.Missing ? "Folder unavailable" : "Cannot read folder");
+            else
+            {
+                if (result.Status == ExplorerLoadStatus.Missing)
+                {
+                    IsAvailable = false;
+                    Children.Clear();
+                }
+                Status = result.ErrorMessage ?? (result.Status == ExplorerLoadStatus.Missing ? "Folder unavailable" : "Cannot read folder");
+            }
         }
         catch (OperationCanceledException)
         {

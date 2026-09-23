@@ -53,6 +53,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRefresh))]
     public async Task RefreshAsync()
     {
+        if (_isGenerating) return;
         var selectedPath = SelectedFolder?.FullPath;
         var expandedPaths = AllNodes().Where(n => n.IsExpanded && n.FullPath is not null)
             .Select(n => n.FullPath!).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -95,6 +96,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
             {
                 _operationCancellation = null;
                 _isRefreshing = false;
+                if (cancellation.IsCancellationRequested) Status = "Cancelled";
                 UpdateBusy();
             }
             cancellation.Dispose();
@@ -173,6 +175,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
             Status = result.Status == PlaylistGenerationStatus.Success ? "Done"
                 : result.Status == PlaylistGenerationStatus.OverwriteRequired ? "Playlist already exists; overwrite confirmation required"
                 : result.ErrorMessage ?? "Playlist generation failed";
+            if (result.Status != PlaylistGenerationStatus.Success) _dialogs.ShowError(Status);
         }
         catch (OperationCanceledException)
         {
@@ -180,7 +183,11 @@ public sealed partial class ExplorerViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            if (IsCurrent(version, cancellation) && IsSelectedPath(path)) Status = exception.Message;
+            if (IsCurrent(version, cancellation) && IsSelectedPath(path))
+            {
+                Status = exception.Message;
+                _dialogs.ShowError(exception.Message);
+            }
         }
         finally
         {
@@ -188,6 +195,8 @@ public sealed partial class ExplorerViewModel : ObservableObject
             {
                 _operationCancellation = null;
                 _isGenerating = false;
+                if (cancellation.IsCancellationRequested && IsSelectedPath(path)) Status = "Cancelled";
+                else if (!IsSelectedPath(path) && Status is "Generating playlist..." or "Cancelling...") Status = "Ready";
                 UpdateBusy();
             }
             cancellation.Dispose();
@@ -197,12 +206,9 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCancel))]
     private void Cancel()
     {
-        ++_operationVersion;
         _operationCancellation?.Cancel();
-        _operationCancellation = null;
         foreach (var root in Roots) root.CancelLoads();
-        _isRefreshing = _isGenerating = false;
-        Status = "Cancelled";
+        Status = _isRefreshing || _isGenerating ? "Cancelling..." : "Cancelled";
         UpdateBusy();
     }
 

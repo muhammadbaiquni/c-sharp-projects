@@ -12,5 +12,6 @@ public interface IPlaylistOutput
         string rootPath,
         IReadOnlyList<PlaylistEntry> entries,
         PathMode pathMode,
+        bool overwriteExisting,
         CancellationToken cancellationToken);
 }

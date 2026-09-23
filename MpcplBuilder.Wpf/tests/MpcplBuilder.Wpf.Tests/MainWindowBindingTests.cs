@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using FluentAssertions;
 using MpcplBuilder.Application.Explorer;
+using MpcplBuilder.Application.Playlists;
 using MpcplBuilder.Wpf.Tests.Fakes;
 using MpcplBuilder.Wpf.ViewModels;
 using MpcplBuilder.Wpf.Views;
@@ -154,6 +155,52 @@ public sealed class MainWindowBindingTests
             explorer.SelectedFolder = null;
             ProcessDispatcher();
             tree.SelectedItem.Should().BeNull();
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void Explorer_CancelButtonIsAccessibleAndCancelsBusyGeneration() => RunOnSta(() =>
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var roots = new FakeLoadExplorerRoots
+        {
+            Handler = _ => Task.FromResult(new ExplorerLoadResult(ExplorerLoadStatus.Success,
+                [new ExplorerFolder(@"C:\", "Local Disk (C:)", false, true)], null))
+        };
+        var explorer = new ExplorerViewModel(roots, new FakeLoadExplorerChildren(), new FakeInspectPlaylistPresence(),
+            generator, new FakeUserDialogService());
+        var view = new ExplorerView { DataContext = explorer };
+        var window = new Window { Content = view };
+        try
+        {
+            window.Show();
+            ProcessDispatcher();
+            var cancel = AssertBinding<Button>(view, "CancelButton", Button.CommandProperty, "CancelCommand");
+            var refresh = (Button)view.FindName("RefreshButton");
+            AssertAccessible(view, "CancelButton");
+            cancel.Command.Should().BeSameAs(explorer.CancelCommand);
+            cancel.IsEnabled.Should().BeFalse();
+            explorer.SelectedFolder = explorer.Roots.Single().Children.Single();
+            explorer.GenerateCommand.Execute(null);
+            ProcessDispatcher();
+            cancel.IsVisible.Should().BeTrue();
+            cancel.IsEnabled.Should().BeTrue();
+
+            cancel.Command!.Execute(null);
+            ProcessDispatcher();
+
+            generator.LastToken.IsCancellationRequested.Should().BeTrue();
+            explorer.IsBusy.Should().BeTrue();
+            refresh.IsEnabled.Should().BeFalse();
+            pending.SetResult(new(PlaylistGenerationStatus.Success, @"C:\Playlist.mpcpl", [], null));
+            ProcessDispatcher();
+            explorer.GenerateCommand.ExecutionTask!.IsCompleted.Should().BeTrue();
+            explorer.IsBusy.Should().BeFalse();
+            explorer.Status.Should().Be("Cancelled");
+            cancel.IsEnabled.Should().BeFalse();
+            refresh.IsEnabled.Should().BeTrue();
         }
         finally { window.Close(); }
     });

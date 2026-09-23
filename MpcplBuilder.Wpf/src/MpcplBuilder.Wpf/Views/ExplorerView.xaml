@@ -89,7 +89,9 @@
             <Button x:Name="GenerateButton" Content="Generate" Command="{Binding GenerateCommand}" MinWidth="100"
                     Margin="0,0,8,0" AutomationProperties.Name="Generate playlist for selected folder" />
             <Button x:Name="RefreshButton" Content="Refresh" Command="{Binding RefreshCommand}" MinWidth="90"
-                    AutomationProperties.Name="Refresh folders" />
+                    Margin="0,0,8,0" AutomationProperties.Name="Refresh folders" />
+            <Button x:Name="CancelButton" Content="_Cancel" Command="{Binding CancelCommand}" MinWidth="90"
+                    AutomationProperties.Name="Cancel Explorer operation" />
         </WrapPanel>
         <GroupBox Grid.Row="2" Header="Folders">
             <TreeView x:Name="FoldersTreeView" ItemsSource="{Binding Roots}"
