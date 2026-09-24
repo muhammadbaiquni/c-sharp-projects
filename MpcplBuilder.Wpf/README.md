@@ -2,6 +2,20 @@
 
 A WPF application that creates MPC-HC/MPC-BE playlists (`.mpcpl`) with automatic subtitle matching. The **Explorer** tab navigates folders from This PC; the **Default** tab keeps the browse-and-preview workflow. Each tab has its own selection and operation state.
 
+## Screenshots
+
+### Default Tab
+
+Browse for a video folder, choose a path type, and preview the playlist.
+
+![MPC Playlist Builder Default tab with folder selection, path options, and playlist preview](docs/images/default-tab.jpg)
+
+### Explorer Tab
+
+Navigate drives and folders from This PC and generate a playlist for the selected folder.
+
+![MPC Playlist Builder Explorer tab with folder navigation and playlist generation controls](docs/images/explorer-tab.jpg)
+
 ## Features
 
 ### Explorer Tab
