@@ -8,13 +8,13 @@ A WPF application that creates MPC-HC/MPC-BE playlists (`.mpcpl`) with automatic
 
 Browse for a video folder, choose a path type, and preview the playlist.
 
-![MPC Playlist Builder Default tab with folder selection, path options, and playlist preview](docs/images/default-tab.jpg)
+![MPC Playlist Builder Default tab with folder selection, path options, and playlist preview](docs/images/default-tab.png)
 
 ### Explorer Tab
 
 Navigate drives and folders from This PC and generate a playlist for the selected folder.
 
-![MPC Playlist Builder Explorer tab with folder navigation and playlist generation controls](docs/images/explorer-tab.jpg)
+![MPC Playlist Builder Explorer tab with folder navigation and playlist generation controls](docs/images/explorer-tab.png)
 
 ## Features
 
