@@ -19,10 +19,10 @@ internal sealed class FakeUserDialogService : IUserDialogService
         return ConfirmOverwriteResult;
     }
 
-    public bool ConfirmBatchOverwrite(string rootPath, int playlistCount)
+    public bool ConfirmBatchOverwrite(string selectionDescription, int playlistCount)
     {
         ConfirmBatchOverwriteCalls++;
-        LastBatchRootPath = rootPath;
+        LastBatchRootPath = selectionDescription;
         LastBatchPlaylistCount = playlistCount;
         OnConfirmOverwrite?.Invoke();
         return ConfirmOverwriteResult;

@@ -63,6 +63,10 @@
                         <Setter Property="Focusable" Value="False" />
                         <Setter Property="IsEnabled" Value="False" />
                     </DataTrigger>
+                    <DataTrigger Binding="{Binding IsMultiSelected}" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                    </DataTrigger>
                 </Style.Triggers>
             </Style>
         </ResourceDictionary>
@@ -106,6 +110,7 @@
                       ItemContainerStyle="{StaticResource FolderItemStyle}"
                       behaviors:TreeViewSelection.IsEnabled="True"
                       behaviors:TreeViewSelection.SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
+                      behaviors:TreeViewSelection.SelectedItems="{Binding SelectedFolders}"
                       AutomationProperties.Name="Folders" />
         </GroupBox>
         <TextBlock x:Name="StatusTextBlock" Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap"

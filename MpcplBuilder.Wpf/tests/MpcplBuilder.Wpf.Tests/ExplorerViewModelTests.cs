@@ -54,6 +54,27 @@ public sealed class ExplorerViewModelTests
     }
 
     [Fact]
+    public async Task Refresh_RestoresEverySelectedFolderWithNewNodeInstances()
+    {
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true),
+            new ExplorerFolder(@"E:\Courses", "Courses", false, true))) };
+        var vm = Create(roots: roots);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var original = vm.Roots.Single().Children.ToArray();
+        vm.SelectedFolder = original[1];
+        vm.SelectedFolders.Add(original[0]);
+        vm.SelectedFolders.Add(original[1]);
+
+        await vm.RefreshCommand.ExecuteAsync(null);
+
+        vm.SelectedFolders.Select(folder => folder.FullPath).Should().Equal(@"D:\Videos", @"E:\Courses");
+        vm.SelectedFolders.Should().NotContain(original);
+        vm.SelectedFolders.Should().OnlyContain(folder => folder.IsMultiSelected);
+        vm.SelectedFolder!.FullPath.Should().Be(@"E:\Courses");
+    }
+
+    [Fact]
     public async Task Expand_WhenSelectedFolderDisappeared_DisablesGenerateAfterLoadSettles()
     {
         var children = new FakeLoadExplorerChildren
@@ -312,6 +333,133 @@ public sealed class ExplorerViewModelTests
     }
 
     [Fact]
+    public async Task Generate_MultipleSelectedFolders_TreatsEachSelectionAsARoot()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Flink", "Flink", false, true),
+            new ExplorerFolder(@"E:\Courses\Docker", "Docker", false, true))) };
+        var vm = new ExplorerViewModel(roots, new FakeLoadExplorerChildren(),
+            new FakeInspectPlaylistPresence(), generator, new FakeUserDialogService());
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var folders = vm.Roots.Single().Children;
+        vm.SelectedFolder = folders[0];
+        vm.SelectedFolders.Add(folders[0]);
+        vm.SelectedFolders.Add(folders[1]);
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        requests.Select(request => request.RootPath).Should().Equal(
+            @"D:\Videos\Flink", @"E:\Courses\Docker");
+    }
+
+    [Fact]
+    public async Task Generate_MultipleSelectedFoldersWithFirstLevelEnabled_TreatsEveryDirectChildAsARoot()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var children = new FakeLoadExplorerChildren
+        {
+            Handler = (path, _) => Task.FromResult(path == @"D:\Videos"
+                ? Success(
+                    new ExplorerFolder(@"D:\Videos\Flink", "Flink", false, true),
+                    new ExplorerFolder(@"D:\Videos\C#", "C#", false, true))
+                : Success(new ExplorerFolder(@"E:\Courses\Docker", "Docker", false, true)))
+        };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true),
+            new ExplorerFolder(@"E:\Courses", "Courses", false, true))) };
+        var vm = new ExplorerViewModel(roots, children, new FakeInspectPlaylistPresence(), generator,
+            new FakeUserDialogService());
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var folders = vm.Roots.Single().Children;
+        vm.SelectedFolder = folders[0];
+        vm.SelectedFolders.Add(folders[0]);
+        vm.SelectedFolders.Add(folders[1]);
+        vm.CreatePlaylistsForFirstLevelSubfolders = true;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        children.Requests.Select(request => request.Path).Should().Equal(@"D:\Videos", @"E:\Courses");
+        requests.Select(request => request.RootPath).Should().Equal(
+            @"D:\Videos\Flink", @"D:\Videos\C#", @"E:\Courses\Docker");
+    }
+
+    [Fact]
+    public async Task Generate_BatchFolderWithoutSupportedVideos_SkipsItAndContinuesWithNextFolder()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return request.RootPath.EndsWith("Empty", StringComparison.Ordinal)
+                ? new PlaylistGenerationResult(PlaylistGenerationStatus.NoVideos, null, [],
+                    "No supported video files were found.")
+                : new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                    Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var children = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Empty", "Empty", false, true),
+            new ExplorerFolder(@"D:\Videos\Flink", "Flink", false, true))) };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true))) };
+        var dialogs = new FakeUserDialogService();
+        var vm = new ExplorerViewModel(roots, children, new FakeInspectPlaylistPresence(), generator, dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.CreatePlaylistsForFirstLevelSubfolders = true;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        requests.Select(request => request.RootPath).Should().Equal(
+            @"D:\Videos\Empty", @"D:\Videos\Flink");
+        dialogs.Errors.Should().BeEmpty();
+        vm.Status.Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task Generate_MultipleSelectedRoots_UsesOneBatchOverwriteDecision()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Flink", "Flink", true, true),
+            new ExplorerFolder(@"E:\Courses\Docker", "Docker", true, true))) };
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = true };
+        var presence = new FakeInspectPlaylistPresence { Handler = (_, _) => Task.FromResult(true) };
+        var vm = new ExplorerViewModel(roots, new FakeLoadExplorerChildren(), presence, generator, dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var folders = vm.Roots.Single().Children;
+        vm.SelectedFolder = folders[0];
+        vm.SelectedFolders.Add(folders[0]);
+        vm.SelectedFolders.Add(folders[1]);
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.ConfirmBatchOverwriteCalls.Should().Be(1);
+        dialogs.ConfirmOverwriteCalls.Should().Be(0);
+        dialogs.LastBatchRootPath.Should().Be("2 selected root folders");
+        dialogs.LastBatchPlaylistCount.Should().Be(2);
+        requests.Should().HaveCount(2).And.OnlyContain(request => request.OverwriteExisting);
+    }
+
+    [Fact]
     public async Task Generate_FirstLevelSubfoldersEnabled_GeneratesEachDirectChildInsteadOfSelectedRoot()
     {
         var requests = new List<GeneratePlaylistRequest>();
@@ -438,7 +586,6 @@ public sealed class ExplorerViewModelTests
     }
 
     [Theory]
-    [InlineData(PlaylistGenerationStatus.NoVideos)]
     [InlineData(PlaylistGenerationStatus.AccessFailure)]
     [InlineData(PlaylistGenerationStatus.OutputFailure)]
     public async Task Generate_WhenGenerationFails_ShowsOneErrorAndLeavesSelectedNodeYellow(PlaylistGenerationStatus failure)
@@ -575,6 +722,32 @@ public sealed class ExplorerViewModelTests
         vm.SelectedFolder.Should().BeSameAs(second);
         vm.IsBusy.Should().BeFalse();
         vm.Status.Should().Be("Ready");
+    }
+
+    [Fact]
+    public async Task Generate_WhenMultiSelectionChangesDuringGeneration_StopsUsingStaleBatch()
+    {
+        var pending = new TaskCompletionSource<PlaylistGenerationResult>();
+        var generator = new FakeGeneratePlaylist { Response = pending.Task };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\First", "First", false, true),
+            new ExplorerFolder(@"D:\Second", "Second", false, true))) };
+        var vm = Create(roots: roots, generate: generator);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        var folders = vm.Roots.Single().Children;
+        vm.SelectedFolder = folders[0];
+        vm.SelectedFolders.Add(folders[0]);
+        vm.SelectedFolders.Add(folders[1]);
+        var generation = vm.GenerateCommand.ExecuteAsync(null);
+
+        vm.SelectedFolders.Remove(folders[1]);
+        pending.SetResult(new PlaylistGenerationResult(
+            PlaylistGenerationStatus.Success, @"D:\First\Playlist.mpcpl", [], null));
+        await generation;
+
+        generator.Calls.Should().Be(1);
+        vm.Status.Should().Be("Ready");
+        vm.IsBusy.Should().BeFalse();
     }
 
     [Theory]

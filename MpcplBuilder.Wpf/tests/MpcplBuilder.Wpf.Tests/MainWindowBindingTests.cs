@@ -75,6 +75,11 @@ public sealed class MainWindowBindingTests
             view.GetType().Name.Should().Be("ExplorerView");
             view.DataContext.Should().BeSameAs(explorer);
             var tree = AssertBinding<TreeView>(view, "FoldersTreeView", ItemsControl.ItemsSourceProperty, "Roots");
+            var selectedItemsProperty = typeof(MpcplBuilder.Wpf.Behaviors.TreeViewSelection)
+                .GetField("SelectedItemsProperty")?.GetValue(null).Should().BeOfType<DependencyProperty>().Subject;
+            selectedItemsProperty.Should().NotBeNull("the Explorer tree must expose multi-selection binding");
+            BindingOperations.GetBindingExpression(tree, selectedItemsProperty!)!.ParentBinding.Path.Path
+                .Should().Be("SelectedFolders");
             var relative = AssertBinding<RadioButton>(view, "RelativePathRadioButton", ToggleButton.IsCheckedProperty, "IsRelativePath");
             var full = AssertBinding<RadioButton>(view, "FullPathRadioButton", ToggleButton.IsCheckedProperty, "IsFullPath");
             var longPath = AssertBinding<RadioButton>(view, "LongPathRadioButton", ToggleButton.IsCheckedProperty, "IsLongPath");
@@ -124,7 +129,14 @@ public sealed class MainWindowBindingTests
             musicItem.IsSelected = true;
             ProcessDispatcher();
             explorer.SelectedFolder.Should().BeSameAs(music);
+            explorer.SelectedFolders.Should().Equal(music);
             generate.IsEnabled.Should().BeTrue();
+            MpcplBuilder.Wpf.Behaviors.TreeViewSelection.ApplySelectionToTree(
+                tree, driveItem, control: true, shift: false);
+            ProcessDispatcher();
+            explorer.SelectedFolders.Should().Equal(music, drive);
+            ((SolidColorBrush)driveItem.Background).Color.Should().Be(SystemColors.HighlightColor);
+            explorer.SelectedFolders.Clear();
             AssertFolderVisual(musicItem, "Music", "Playlist present", Colors.ForestGreen);
             AssertFolderVisual(driveItem, "Local Disk (C:)", "No playlist", Colors.Goldenrod);
             drive.HasPlaylist = true;
@@ -213,6 +225,43 @@ public sealed class MainWindowBindingTests
             explorer.Status.Should().Be("Cancelled");
             cancel.IsEnabled.Should().BeFalse();
             refresh.IsEnabled.Should().BeTrue();
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void Explorer_RefreshPreservesMultipleRenderedSelections() => RunOnSta(() =>
+    {
+        var roots = new FakeLoadExplorerRoots
+        {
+            Handler = _ => Task.FromResult(new ExplorerLoadResult(ExplorerLoadStatus.Success,
+                [new ExplorerFolder(@"D:\", "D", false, true),
+                 new ExplorerFolder(@"E:\", "E", false, true)], null))
+        };
+        var explorer = new ExplorerViewModel(roots, new FakeLoadExplorerChildren(),
+            new FakeInspectPlaylistPresence(), new FakeGeneratePlaylist(), new FakeUserDialogService());
+        explorer.InitializeCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+        var view = new ExplorerView { DataContext = explorer };
+        var window = new Window { Content = view };
+        try
+        {
+            window.Show();
+            ProcessDispatcher();
+            var tree = (TreeView)view.FindName("FoldersTreeView");
+            var rootItem = Container(tree, explorer.Roots.Single());
+            var firstItem = Container(rootItem, explorer.Roots.Single().Children[0]);
+            var secondItem = Container(rootItem, explorer.Roots.Single().Children[1]);
+            firstItem.IsSelected = true;
+            ProcessDispatcher();
+            MpcplBuilder.Wpf.Behaviors.TreeViewSelection.ApplySelectionToTree(
+                tree, secondItem, control: true, shift: false);
+            explorer.SelectedFolders.Select(folder => folder.FullPath).Should().Equal(@"D:\", @"E:\");
+
+            explorer.RefreshCommand.Execute(null);
+            ProcessDispatcher();
+
+            explorer.SelectedFolders.Select(folder => folder.FullPath).Should().Equal(@"D:\", @"E:\");
+            explorer.SelectedFolders.Should().OnlyContain(folder => folder.IsMultiSelected);
         }
         finally { window.Close(); }
     });
