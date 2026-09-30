@@ -311,6 +311,109 @@ public sealed class ExplorerViewModelTests
         generator.LastRequest!.RootPath.Should().Be(@"D:\Series");
     }
 
+    [Fact]
+    public async Task Generate_FirstLevelSubfoldersEnabled_GeneratesEachDirectChildInsteadOfSelectedRoot()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var children = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Tutorial Apache Flink", "Tutorial Apache Flink", false, true),
+            new ExplorerFolder(@"D:\Videos\Tutorial C#", "Tutorial C#", false, true))) };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true))) };
+        var vm = new ExplorerViewModel(roots, children, new FakeInspectPlaylistPresence(), generator,
+            new FakeUserDialogService());
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.CreatePlaylistsForFirstLevelSubfolders = true;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        children.Requests.Select(request => request.Path).Should().Equal(@"D:\Videos");
+        requests.Select(request => request.RootPath).Should().Equal(
+            @"D:\Videos\Tutorial Apache Flink", @"D:\Videos\Tutorial C#");
+        requests.Should().OnlyContain(request => request.PathMode == PathMode.Relative);
+        vm.Status.Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task Generate_FirstLevelSubfoldersEnabled_ConfirmingOnceOverwritesEveryExistingPlaylist()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var children = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Existing A", "Existing A", true, true),
+            new ExplorerFolder(@"D:\Videos\Existing B", "Existing B", true, true),
+            new ExplorerFolder(@"D:\Videos\New", "New", false, true))) };
+        var presence = new FakeInspectPlaylistPresence
+        {
+            Handler = (path, _) => Task.FromResult(path.EndsWith("Existing A") || path.EndsWith("Existing B"))
+        };
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = true };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true))) };
+        var vm = new ExplorerViewModel(roots, children, presence, generator, dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.CreatePlaylistsForFirstLevelSubfolders = true;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.ConfirmBatchOverwriteCalls.Should().Be(1);
+        dialogs.ConfirmOverwriteCalls.Should().Be(0);
+        dialogs.LastBatchRootPath.Should().Be(@"D:\Videos");
+        dialogs.LastBatchPlaylistCount.Should().Be(2);
+        requests.Select(request => (request.RootPath, request.OverwriteExisting)).Should().Equal(
+            (@"D:\Videos\Existing A", true),
+            (@"D:\Videos\Existing B", true),
+            (@"D:\Videos\New", false));
+    }
+
+    [Fact]
+    public async Task Generate_FirstLevelSubfoldersEnabled_DecliningOnceSkipsExistingAndGeneratesMissingPlaylists()
+    {
+        var requests = new List<GeneratePlaylistRequest>();
+        var generator = new SequenceGenerator(request =>
+        {
+            requests.Add(request);
+            return new PlaylistGenerationResult(PlaylistGenerationStatus.Success,
+                Path.Combine(request.RootPath, "Playlist.mpcpl"), [], null);
+        });
+        var children = new FakeLoadExplorerChildren { Handler = (_, _) => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos\Existing A", "Existing A", true, true),
+            new ExplorerFolder(@"D:\Videos\Existing B", "Existing B", true, true),
+            new ExplorerFolder(@"D:\Videos\New", "New", false, true))) };
+        var presence = new FakeInspectPlaylistPresence
+        {
+            Handler = (path, _) => Task.FromResult(path.EndsWith("Existing A") || path.EndsWith("Existing B"))
+        };
+        var dialogs = new FakeUserDialogService { ConfirmOverwriteResult = false };
+        var roots = new FakeLoadExplorerRoots { Handler = _ => Task.FromResult(Success(
+            new ExplorerFolder(@"D:\Videos", "Videos", false, true))) };
+        var vm = new ExplorerViewModel(roots, children, presence, generator, dialogs);
+        await vm.InitializeCommand.ExecuteAsync(null);
+        vm.SelectedFolder = vm.Roots.Single().Children.Single();
+        vm.CreatePlaylistsForFirstLevelSubfolders = true;
+
+        await vm.GenerateCommand.ExecuteAsync(null);
+
+        dialogs.ConfirmBatchOverwriteCalls.Should().Be(1);
+        dialogs.ConfirmOverwriteCalls.Should().Be(0);
+        requests.Should().ContainSingle().Which.Should().Be(
+            GeneratePlaylistRequest.Relative(@"D:\Videos\New"));
+        vm.Status.Should().Be("Done");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

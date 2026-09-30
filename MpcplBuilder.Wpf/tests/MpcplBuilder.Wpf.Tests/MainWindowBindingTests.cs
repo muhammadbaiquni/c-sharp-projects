@@ -78,10 +78,22 @@ public sealed class MainWindowBindingTests
             var relative = AssertBinding<RadioButton>(view, "RelativePathRadioButton", ToggleButton.IsCheckedProperty, "IsRelativePath");
             var full = AssertBinding<RadioButton>(view, "FullPathRadioButton", ToggleButton.IsCheckedProperty, "IsFullPath");
             var longPath = AssertBinding<RadioButton>(view, "LongPathRadioButton", ToggleButton.IsCheckedProperty, "IsLongPath");
+            var firstLevelSubfolders = AssertBinding<CheckBox>(view, "FirstLevelSubfoldersCheckBox",
+                ToggleButton.IsCheckedProperty, "CreatePlaylistsForFirstLevelSubfolders");
             var generate = AssertBinding<Button>(view, "GenerateButton", Button.CommandProperty, "GenerateCommand");
             var refresh = AssertBinding<Button>(view, "RefreshButton", Button.CommandProperty, "RefreshCommand");
             var status = AssertBinding<TextBlock>(view, "StatusTextBlock", TextBlock.TextProperty, "Status");
-            AssertAccessible(view, "FoldersTreeView", "RelativePathRadioButton", "FullPathRadioButton", "LongPathRadioButton", "GenerateButton", "RefreshButton");
+            AssertAccessible(view, "FoldersTreeView", "RelativePathRadioButton", "FullPathRadioButton", "LongPathRadioButton",
+                "FirstLevelSubfoldersCheckBox", "GenerateButton", "RefreshButton");
+            firstLevelSubfolders.Content.Should().Be("Create playlists for first-level subfolders");
+            var relativeCenterY = relative.TranslatePoint(new Point(0, relative.ActualHeight / 2), view).Y;
+            var generateCenterY = generate.TranslatePoint(new Point(0, generate.ActualHeight / 2), view).Y;
+            var generateBottomY = generate.TranslatePoint(new Point(0, generate.ActualHeight), view).Y;
+            var firstLevelSubfoldersTopY = firstLevelSubfolders.TranslatePoint(new Point(), view).Y;
+            generateCenterY.Should().BeApproximately(relativeCenterY, 1,
+                "the action buttons must remain aligned with the path settings");
+            firstLevelSubfoldersTopY.Should().BeGreaterThan(generateBottomY,
+                "the first-level option must render on a separate row below the toolbar");
             relative.IsChecked.Should().BeTrue();
             full.IsChecked = true;
             explorer.IsFullPath.Should().BeTrue();

@@ -26,6 +26,7 @@ public sealed partial class ExplorerViewModel : ObservableObject
     [ObservableProperty] private bool isRelativePath = true;
     [ObservableProperty] private bool isFullPath;
     [ObservableProperty] private bool isLongPath;
+    [ObservableProperty] private bool createPlaylistsForFirstLevelSubfolders;
     [ObservableProperty] private string status = "Ready";
     [ObservableProperty, NotifyCanExecuteChangedFor(nameof(GenerateCommand)), NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private bool isBusy;
@@ -131,8 +132,6 @@ public sealed partial class ExplorerViewModel : ObservableObject
         if (!CanGenerate()) return;
         var folder = SelectedFolder!;
         var path = folder.FullPath!;
-        var request = IsLongPath ? GeneratePlaylistRequest.Long(path)
-            : IsFullPath ? GeneratePlaylistRequest.Full(path) : GeneratePlaylistRequest.Relative(path);
         var version = ++_operationVersion;
         var cancellation = new CancellationTokenSource();
         _operationCancellation = cancellation;
@@ -141,41 +140,56 @@ public sealed partial class ExplorerViewModel : ObservableObject
         Status = "Generating playlist...";
         try
         {
-            var exists = await _inspectPresence.ExecuteAsync(path, cancellation.Token);
-            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
-            if (exists)
+            IReadOnlyList<(string Path, FolderNodeViewModel? Node, bool? Exists)> targets;
+            BatchOverwritePolicy? batchOverwritePolicy = null;
+            if (CreatePlaylistsForFirstLevelSubfolders)
             {
-                if (!_dialogs.ConfirmOverwrite(System.IO.Path.Combine(path, "Playlist.mpcpl")))
+                var children = await _loadChildren.ExecuteAsync(path, cancellation.Token);
+                if (!IsOperationActive(path, version, cancellation)) return;
+                if (children.Status is not (ExplorerLoadStatus.Success or ExplorerLoadStatus.PartialAccess))
                 {
-                    Status = "Cancelled";
+                    Status = children.ErrorMessage ?? "Cannot read first-level subfolders";
+                    _dialogs.ShowError(Status);
                     return;
                 }
-                request = request with { OverwriteExisting = true };
-            }
-            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
-            var result = await _generatePlaylist.ExecuteAsync(request, cancellation.Token);
-            if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
-            if (result.Status == PlaylistGenerationStatus.OverwriteRequired && !request.OverwriteExisting)
-            {
-                if (!_dialogs.ConfirmOverwrite(System.IO.Path.Combine(path, "Playlist.mpcpl")))
+
+                var childTargets = children.Folders.Where(child => child.IsAvailable)
+                    .Select(child => (child.Path, Node: FindLoadedChild(folder, child.Path)))
+                    .ToArray();
+                if (childTargets.Length == 0)
                 {
-                    Status = "Cancelled";
+                    Status = "No first-level subfolders found";
                     return;
                 }
-                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
-                result = await _generatePlaylist.ExecuteAsync(request with { OverwriteExisting = true }, cancellation.Token);
-                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
+
+                var inspectedTargets = new List<(string Path, FolderNodeViewModel? Node, bool? Exists)>(childTargets.Length);
+                foreach (var target in childTargets)
+                {
+                    var exists = await _inspectPresence.ExecuteAsync(target.Path, cancellation.Token);
+                    if (!IsOperationActive(path, version, cancellation)) return;
+                    inspectedTargets.Add((target.Path, target.Node, exists));
+                }
+                targets = inspectedTargets;
+                batchOverwritePolicy = new BatchOverwritePolicy();
+                var existingPlaylistCount = inspectedTargets.Count(target => target.Exists == true);
+                if (existingPlaylistCount > 0)
+                {
+                    batchOverwritePolicy.OverwriteExisting = _dialogs.ConfirmBatchOverwrite(path, existingPlaylistCount);
+                    if (!IsOperationActive(path, version, cancellation)) return;
+                }
             }
-            if (result.Status == PlaylistGenerationStatus.Success)
+            else
             {
-                var hasPlaylist = await _inspectPresence.ExecuteAsync(path, cancellation.Token);
-                if (!IsCurrent(version, cancellation) || !IsSelectedPath(path)) return;
-                folder.HasPlaylist = hasPlaylist;
+                targets = [(path, folder, null)];
             }
-            Status = result.Status == PlaylistGenerationStatus.Success ? "Done"
-                : result.Status == PlaylistGenerationStatus.OverwriteRequired ? "Playlist already exists; overwrite confirmation required"
-                : result.ErrorMessage ?? "Playlist generation failed";
-            if (result.Status != PlaylistGenerationStatus.Success) _dialogs.ShowError(Status);
+
+            foreach (var target in targets)
+            {
+                if (batchOverwritePolicy?.OverwriteExisting == false && target.Exists == true) continue;
+                if (!await GenerateForPathAsync(target.Path, target.Node, path, version, cancellation,
+                        target.Exists, batchOverwritePolicy)) return;
+            }
+            Status = "Done";
         }
         catch (OperationCanceledException)
         {
@@ -201,6 +215,82 @@ public sealed partial class ExplorerViewModel : ObservableObject
             }
             cancellation.Dispose();
         }
+    }
+
+    private async Task<bool> GenerateForPathAsync(string targetPath, FolderNodeViewModel? node,
+        string selectedPath, long version, CancellationTokenSource cancellation,
+        bool? knownPresence = null, BatchOverwritePolicy? batchOverwritePolicy = null)
+    {
+        var request = IsLongPath ? GeneratePlaylistRequest.Long(targetPath)
+            : IsFullPath ? GeneratePlaylistRequest.Full(targetPath) : GeneratePlaylistRequest.Relative(targetPath);
+        var exists = knownPresence;
+        if (exists is null)
+        {
+            exists = await _inspectPresence.ExecuteAsync(targetPath, cancellation.Token);
+            if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+        }
+        if (exists == true)
+        {
+            var overwrite = batchOverwritePolicy?.OverwriteExisting
+                ?? _dialogs.ConfirmOverwrite(System.IO.Path.Combine(targetPath, "Playlist.mpcpl"));
+            if (!overwrite)
+            {
+                if (batchOverwritePolicy is not null) return true;
+                Status = "Cancelled";
+                return false;
+            }
+            request = request with { OverwriteExisting = true };
+        }
+        if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+        var result = await _generatePlaylist.ExecuteAsync(request, cancellation.Token);
+        if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+        if (result.Status == PlaylistGenerationStatus.OverwriteRequired && !request.OverwriteExisting)
+        {
+            bool overwrite;
+            if (batchOverwritePolicy is not null)
+            {
+                batchOverwritePolicy.OverwriteExisting ??=
+                    _dialogs.ConfirmBatchOverwrite(selectedPath, 1);
+                overwrite = batchOverwritePolicy.OverwriteExisting.Value;
+            }
+            else
+            {
+                overwrite = _dialogs.ConfirmOverwrite(System.IO.Path.Combine(targetPath, "Playlist.mpcpl"));
+            }
+            if (!overwrite)
+            {
+                if (batchOverwritePolicy is not null) return true;
+                Status = "Cancelled";
+                return false;
+            }
+            if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+            result = await _generatePlaylist.ExecuteAsync(request with { OverwriteExisting = true }, cancellation.Token);
+            if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+        }
+        if (result.Status == PlaylistGenerationStatus.Success)
+        {
+            var hasPlaylist = await _inspectPresence.ExecuteAsync(targetPath, cancellation.Token);
+            if (!IsOperationActive(selectedPath, version, cancellation)) return false;
+            if (node is not null) node.HasPlaylist = hasPlaylist;
+            return true;
+        }
+
+        Status = result.Status == PlaylistGenerationStatus.OverwriteRequired
+            ? "Playlist already exists; overwrite confirmation required"
+            : result.ErrorMessage ?? "Playlist generation failed";
+        _dialogs.ShowError(Status);
+        return false;
+    }
+
+    private static FolderNodeViewModel? FindLoadedChild(FolderNodeViewModel folder, string path) =>
+        folder.Children.FirstOrDefault(child => StringComparer.OrdinalIgnoreCase.Equals(child.FullPath, path));
+
+    private bool IsOperationActive(string selectedPath, long version, CancellationTokenSource cancellation) =>
+        IsCurrent(version, cancellation) && IsSelectedPath(selectedPath);
+
+    private sealed class BatchOverwritePolicy
+    {
+        public bool? OverwriteExisting { get; set; }
     }
 
     [RelayCommand(CanExecute = nameof(CanCancel))]

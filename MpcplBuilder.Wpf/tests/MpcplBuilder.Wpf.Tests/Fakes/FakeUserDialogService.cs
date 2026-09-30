@@ -6,12 +6,24 @@ internal sealed class FakeUserDialogService : IUserDialogService
 {
     public bool ConfirmOverwriteResult { get; set; }
     public int ConfirmOverwriteCalls { get; private set; }
+    public int ConfirmBatchOverwriteCalls { get; private set; }
+    public string? LastBatchRootPath { get; private set; }
+    public int LastBatchPlaylistCount { get; private set; }
     public Action? OnConfirmOverwrite { get; set; }
     public List<string> Errors { get; } = [];
 
     public bool ConfirmOverwrite(string outputPath)
     {
         ConfirmOverwriteCalls++;
+        OnConfirmOverwrite?.Invoke();
+        return ConfirmOverwriteResult;
+    }
+
+    public bool ConfirmBatchOverwrite(string rootPath, int playlistCount)
+    {
+        ConfirmBatchOverwriteCalls++;
+        LastBatchRootPath = rootPath;
+        LastBatchPlaylistCount = playlistCount;
         OnConfirmOverwrite?.Invoke();
         return ConfirmOverwriteResult;
     }

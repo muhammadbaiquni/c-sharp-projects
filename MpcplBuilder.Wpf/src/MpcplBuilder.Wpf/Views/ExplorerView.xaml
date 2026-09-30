@@ -71,6 +71,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="8" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="8" />
             <RowDefinition Height="*" />
             <RowDefinition Height="8" />
             <RowDefinition Height="Auto" />
@@ -93,14 +95,20 @@
             <Button x:Name="CancelButton" Content="_Cancel" Command="{Binding CancelCommand}" MinWidth="90"
                     AutomationProperties.Name="Cancel Explorer operation" />
         </WrapPanel>
-        <GroupBox Grid.Row="2" Header="Folders">
+        <CheckBox x:Name="FirstLevelSubfoldersCheckBox" Grid.Row="2"
+                  Content="Create playlists for first-level subfolders"
+                  IsChecked="{Binding CreatePlaylistsForFirstLevelSubfolders, Mode=TwoWay}"
+                  HorizontalAlignment="Left" VerticalAlignment="Center"
+                  AutomationProperties.Name="Create playlists for first-level subfolders"
+                  ToolTip="Treat each folder directly inside the selected folder as a separate root and create its playlist there" />
+        <GroupBox Grid.Row="4" Header="Folders">
             <TreeView x:Name="FoldersTreeView" ItemsSource="{Binding Roots}"
                       ItemContainerStyle="{StaticResource FolderItemStyle}"
                       behaviors:TreeViewSelection.IsEnabled="True"
                       behaviors:TreeViewSelection.SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
                       AutomationProperties.Name="Folders" />
         </GroupBox>
-        <TextBlock x:Name="StatusTextBlock" Grid.Row="4" Text="{Binding Status}" TextWrapping="Wrap"
+        <TextBlock x:Name="StatusTextBlock" Grid.Row="6" Text="{Binding Status}" TextWrapping="Wrap"
                    AutomationProperties.Name="Explorer status" AutomationProperties.LiveSetting="Polite" />
     </Grid>
 </UserControl>
