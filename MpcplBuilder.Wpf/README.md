@@ -12,20 +12,21 @@ Browse for a video folder, choose a path type, and preview the playlist.
 
 ### Explorer Tab
 
-Navigate drives and folders from This PC and generate a playlist for the selected folder.
+Navigate drives and folders from This PC, select one or more roots, and generate playlists in a single batch.
 
-![MPC Playlist Builder Explorer tab with folder navigation and playlist generation controls](docs/images/explorer-tab.png)
+![MPC Playlist Builder Explorer tab with multi-selected folders and first-level subfolder generation](docs/images/explorer-tab.png)
 
 ## Features
 
 ### Explorer Tab
 
 - Starts at **This PC** and shows drives and folders only. Expand a folder to load its immediate children; expanding does not recursively scan its subtree.
-- Select one active folder at a time. Both green and yellow folders can be selected. A **green** folder icon means `Playlist.mpcpl` exists directly in that folder; **yellow** means it does not. A playlist in a descendant does not change its parent's icon.
+- Select one folder with a normal click, toggle additional roots with **Ctrl+click**, or select a visible range with **Shift+click**. Both green and yellow folders can be selected. A **green** folder icon means `Playlist.mpcpl` exists directly in that folder; **yellow** means it does not. A playlist in a descendant does not change its parent's icon.
 - Uses **Relative Path** by default. **Full Path** and **Long Path** are also available.
-- **Generate** recursively includes supported videos beneath the selected folder and writes `Playlist.mpcpl` in that folder. The icon updates when generation succeeds.
-- **Refresh** reloads drives and folder status, retaining the expanded folders and selection when those paths still exist.
-- If the playlist already exists, **Generate** asks for overwrite confirmation. Choosing **No** leaves the file unchanged.
+- **Generate** recursively includes supported videos beneath every selected root and writes `Playlist.mpcpl` in each root. Folders without supported videos are skipped while the remaining batch continues.
+- Enable **Create playlists for first-level subfolders** to treat each direct child of every selected folder as a playlist root. Files directly inside the selected parent are ignored in this mode, while each child is still scanned recursively.
+- **Refresh** reloads drives and folder status, retaining expanded folders and all selections when those paths still exist.
+- If playlists already exist in a multi-folder batch, **Generate** asks for overwrite confirmation once. Choosing **Yes** overwrites all existing playlists; **No** skips existing playlists and still creates missing ones.
 
 ### Default Tab
 
@@ -78,10 +79,12 @@ Subtitles are matched automatically when their filenames correspond to the video
 
 ### Explorer
 
-1. Open **Explorer**, expand **This PC**, then expand drives and folders to find the folder you want. Select that folder; only one folder is active.
+1. Open **Explorer**, expand **This PC**, then expand drives and folders to find the roots you want. Click one folder normally, use **Ctrl+click** to toggle more folders, or use **Shift+click** to select a visible range.
 2. Choose **Relative Path** (the default), **Full Path**, or **Long Path**.
-3. Click **Generate**. The app scans the selected folder recursively and saves `Playlist.mpcpl` there. If the file already exists, confirm or cancel the overwrite prompt.
-4. Click **Refresh** to reload drives, folders, and direct playlist status. Existing paths retain their expanded and selected state.
+3. Optionally enable **Create playlists for first-level subfolders**. When enabled, every direct child of each selected folder becomes a separate root; when disabled, each selected folder itself is a root.
+4. Click **Generate**. The app scans every resulting root recursively and saves `Playlist.mpcpl` in that root. Folders without supported videos are skipped automatically.
+5. If one or more playlists already exist, choose **Yes** once to overwrite all of them or **No** to skip them while still generating missing playlists.
+6. Click **Refresh** to reload drives, folders, and direct playlist status. Existing paths retain their expanded and selected state.
 
 ### Default
 
@@ -111,8 +114,9 @@ Subtitles are matched automatically when their filenames correspond to the video
 
 | Button | Function |
 | --- | --- |
-| **Generate** | Creates `Playlist.mpcpl` for the selected folder and its descendant videos. |
-| **Refresh** | Reloads drives, folders, and direct playlist status. |
+| **Generate** | Creates `Playlist.mpcpl` for every selected root, or for their first-level subfolders when that option is enabled. |
+| **Refresh** | Reloads drives, folders, and direct playlist status while preserving available selections and expanded paths. |
+| **Cancel** | Cancels the entire active generation batch. |
 
 ## Default Tab Status Indicators
 
