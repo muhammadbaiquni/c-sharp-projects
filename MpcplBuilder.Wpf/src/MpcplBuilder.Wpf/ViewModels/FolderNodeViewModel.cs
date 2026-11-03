@@ -14,6 +14,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     private bool _childrenLoaded;
 
     [ObservableProperty] private bool isExpanded;
+    [ObservableProperty] private bool isMultiSelected;
     [ObservableProperty] private bool isLoading;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(CanGenerate))] private bool isAvailable;
     [ObservableProperty] private string status = string.Empty;
