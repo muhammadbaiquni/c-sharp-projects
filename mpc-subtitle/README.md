@@ -97,6 +97,9 @@ From the supplied Windows package:
 
 Always quote paths that contain spaces.
 
+> [!WARNING]
+> The CLI overwrites an existing output file without prompting. Back up an existing subtitle or use `--out` to choose a different destination before running the command.
+
 ### CLI options
 
 | Option | Description |
